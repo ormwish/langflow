@@ -1,57 +1,117 @@
-import {
-  classNames,
-  nodeColors,
-  nodeIconsLucide,
-  toTitleCase,
-} from "../../utils";
-import ParameterComponent from "./components/parameterComponent";
-import { typesContext } from "../../contexts/typesContext";
-import {
-  useContext,
-  useState,
-  useEffect,
-  useRef,
-  ForwardRefExoticComponent,
-  ComponentType,
-  SVGProps,
-  ReactNode,
-} from "react";
-import { NodeDataType } from "../../types/flow";
-import { alertContext } from "../../contexts/alertContext";
-import { PopUpContext } from "../../contexts/popUpContext";
-import NodeModal from "../../modals/NodeModal";
-import Tooltip from "../../components/TooltipComponent";
-import { NodeToolbar } from "reactflow";
-import NodeToolbarComponent from "../../pages/FlowPage/components/nodeToolbarComponent";
-
+import { cloneDeep } from "lodash";
+import { useContext, useEffect, useState } from "react";
+import { NodeToolbar, useUpdateNodeInternals } from "reactflow";
 import ShadTooltip from "../../components/ShadTooltipComponent";
+import Tooltip from "../../components/TooltipComponent";
+import IconComponent from "../../components/genericIconComponent";
+import InputComponent from "../../components/inputComponent";
+import { Textarea } from "../../components/ui/textarea";
 import { useSSE } from "../../contexts/SSEContext";
-import { ReactElement } from "react-markdown/lib/react-markdown";
+import { FlowsContext } from "../../contexts/flowsContext";
+import { typesContext } from "../../contexts/typesContext";
+import NodeToolbarComponent from "../../pages/FlowPage/components/nodeToolbarComponent";
+import { validationStatusType } from "../../types/components";
+import { NodeDataType } from "../../types/flow";
+import {
+  cleanEdges,
+  handleKeyDown,
+  scapedJSONStringfy,
+} from "../../utils/reactflowUtils";
+import { nodeColors, nodeIconsLucide } from "../../utils/styleUtils";
+import { classNames, getFieldTitle } from "../../utils/utils";
+import ParameterComponent from "./components/parameterComponent";
 
 export default function GenericNode({
-  data,
+  data: olddata,
+  xPos,
+  yPos,
   selected,
 }: {
   data: NodeDataType;
   selected: boolean;
-}) {
-  const { setErrorData } = useContext(alertContext);
-  const showError = useRef(true);
-  const { types, deleteNode } = useContext(typesContext);
+  xPos: number;
+  yPos: number;
+}): JSX.Element {
+  const [data, setData] = useState(olddata);
+  const { updateFlow, flows, tabId } = useContext(FlowsContext);
+  const updateNodeInternals = useUpdateNodeInternals();
+  const { types, deleteNode, reactFlowInstance, setFilterEdge, getFilterEdge } =
+    useContext(typesContext);
+  const name = nodeIconsLucide[data.type] ? data.type : types[data.type];
+  const [inputName, setInputName] = useState(true);
+  const [nodeName, setNodeName] = useState(data.node!.display_name);
+  const [inputDescription, setInputDescription] = useState(false);
+  const [nodeDescription, setNodeDescription] = useState(
+    data.node?.description!
+  );
+  const [validationStatus, setValidationStatus] =
+    useState<validationStatusType | null>(null);
+  const [showNode, setShowNode] = useState<boolean>(true);
+  const [handles, setHandles] = useState<boolean[] | []>([]);
+  let numberOfInputs: boolean[] = [];
 
-  const { closePopUp, openPopUp } = useContext(PopUpContext);
-  // any to avoid type conflict
-  const Icon: any =
-    nodeIconsLucide[data.type] || nodeIconsLucide[types[data.type]];
-  const [validationStatus, setValidationStatus] = useState(null);
+  function countHandles(): void {
+    numberOfInputs = Object.keys(data.node!.template)
+      .filter((templateField) => templateField.charAt(0) !== "_")
+      .map((templateCamp) => {
+        const { template } = data.node!;
+        if (template[templateCamp].input_types) return true;
+        if (!template[templateCamp].show) return false;
+        switch (template[templateCamp].type) {
+          case "str":
+            return false;
+          case "bool":
+            return false;
+          case "float":
+            return false;
+          case "code":
+            return false;
+          case "prompt":
+            return false;
+          case "file":
+            return false;
+          case "int":
+            return false;
+          default:
+            return true;
+        }
+      });
+    setHandles(numberOfInputs);
+  }
+
+  useEffect(() => {
+    countHandles();
+  }, []);
+
   // State for outline color
   const { sseData, isBuilding } = useSSE();
+  useEffect(() => {
+    olddata.node = data.node;
+    let myFlow = flows.find((flow) => flow.id === tabId);
+    if (reactFlowInstance && myFlow) {
+      let flow = cloneDeep(myFlow);
+      flow.data = reactFlowInstance.toObject();
+      cleanEdges({
+        flow: {
+          edges: flow.data.edges,
+          nodes: flow.data.nodes,
+        },
+        updateEdge: (edge) => {
+          flow.data!.edges = edge;
+          reactFlowInstance.setEdges(edge);
+          updateNodeInternals(data.id);
+        },
+      });
+      updateFlow(flow);
+    }
+    countHandles();
+  }, [data]);
 
-  // useEffect(() => {
-  //   if (reactFlowInstance) {
-  //     setParams(Object.values(reactFlowInstance.toObject()));
-  //   }
-  // }, [save]);
+  useEffect(() => {
+    setTimeout(() => {
+      updateNodeInternals(data.id);
+    }, 300);
+  }, [showNode]);
 
   // New useEffect to watch for changes in sseData and update validation status
   useEffect(() => {
@@ -63,192 +123,393 @@ export default function GenericNode({
       setValidationStatus(null);
     }
   }, [sseData, data.id]);
-
-  if (!Icon) {
-    if (showError.current) {
-      setErrorData({
-        title: data.type
-          ? `The ${data.type} node could not be rendered, please review your json file`
-          : "There was a node that can't be rendered, please review your json file",
-      });
-      showError.current = false;
-    }
-    deleteNode(data.id);
-    return;
-  }
-
-  useEffect(() => {}, [closePopUp, data.node.template]);
-
   return (
     <>
       <NodeToolbar>
         <NodeToolbarComponent
+          position={{ x: xPos, y: yPos }}
           data={data}
-          openPopUp={openPopUp}
+          setData={setData}
           deleteNode={deleteNode}
+          setShowNode={setShowNode}
+          numberOfHandles={handles}
+          showNode={showNode}
         ></NodeToolbarComponent>
       </NodeToolbar>
 
       <div
         className={classNames(
           selected ? "border border-ring" : "border",
-          "prompt-node relative flex w-96 flex-col justify-center rounded-lg bg-background"
+          " transition-transform ",
+          showNode
+            ? " w-96 scale-100 transform rounded-lg duration-500 ease-in-out "
+            : " transform-width w-26 h-26 scale-90 transform rounded-full duration-500 ",
+          "generic-node-div"
         )}
       >
-        <div className="flex w-full items-center justify-between gap-8 rounded-t-lg border-b bg-muted p-4  ">
-          <div className="flex w-full items-center gap-2 truncate text-lg">
-            <Icon
-              strokeWidth={1.5}
-              className="h-10 w-10 rounded p-1"
-              style={{
-                color: nodeColors[types[data.type]] ?? nodeColors.unknown,
-              }}
-            />
-            <div className="ml-2 truncate">
-              <ShadTooltip
-                delayDuration={1500}
-                content={data.node.display_name}
-              >
-                <div className="ml-2 truncate text-primary">
-                  {data.node.display_name}
-                </div>
-              </ShadTooltip>
-            </div>
+        {data.node?.beta && showNode && (
+          <div className="beta-badge-wrapper">
+            <div className="beta-badge-content">BETA</div>
           </div>
-          <div className="flex gap-3">
-            <button
-              className="relative"
-              onClick={(event) => {
-                event.preventDefault();
-                openPopUp(<NodeModal data={data} />);
-              }}
-            ></button>
-          </div>
-          <div className="flex gap-3">
-            <div>
-              <Tooltip
-                title={
-                  !validationStatus ? (
-                    "Validating..."
-                  ) : (
-                    <div className="max-h-96 overflow-auto">
-                      {validationStatus.params ||
-                        ""
-                          .split("\n")
-                          .map((line, index) => <div key={index}>{line}</div>)}
-                    </div>
-                  )
+        )}
+        <div>
+          <div
+            className={
+              "generic-node-div-title " +
+              (!showNode
+                ? " relative h-24 w-24 rounded-full "
+                : " justify-between rounded-t-lg ")
+            }
+          >
+            <div
+              className={
+                "generic-node-title-arrangement rounded-full" +
+                (!showNode && "justify-center")
+              }
+            >
+              <IconComponent
+                name={data.node?.flow ? "Ungroup" : name}
+                className={
+                  "generic-node-icon " +
+                  (!showNode && "absolute inset-x-6 h-12 w-12")
                 }
-              >
-                <div className="w-5 h-5 relative top-[3px]">
-                  <div
-                    className={classNames(
-                      validationStatus && validationStatus.valid
-                        ? "w-4 h-4 rounded-full bg-status-red opacity-100"
-                        : "w-4 h-4 rounded-full bg-ring opacity-0 hidden animate-spin",
-                      "absolute w-4 hover:text-ring hover: transition-all ease-in-out duration-200"
-                    )}
-                  ></div>
-                  <div
-                    className={classNames(
-                      validationStatus && !validationStatus.valid
-                        ? "w-4 h-4 rounded-full  bg-status-red opacity-100"
-                        : "w-4 h-4 rounded-full bg-ring opacity-0 hidden animate-spin",
-                      "absolute w-4 hover:text-ring hover: transition-all ease-in-out duration-200"
-                    )}
-                  ></div>
-                  <div
-                    className={classNames(
-                      !validationStatus || isBuilding
-                        ? "w-4 h-4 rounded-full  bg-status-yellow opacity-100"
-                        : "w-4 h-4 rounded-full bg-ring opacity-0 hidden animate-spin",
-                      "absolute w-4 hover:text-ring transition-all ease-in-out duration-200"
-                    )}
-                  ></div>
-                </div>
-              </Tooltip>
-            </div>
-          </div>
-        </div>
-
-        <div className="h-full w-full py-5 text-foreground">
-          <div className="w-full px-5 pb-3 text-sm text-muted-foreground">
-            {data.node.description}
-          </div>
-
-          <>
-            {Object.keys(data.node.template)
-              .filter((t) => t.charAt(0) !== "_")
-              .map((t: string, idx) => (
-                <div key={idx}>
-                  {/* {idx === 0 ? (
-                                <div
-                                    className={classNames(
-                                        "px-5 py-2 mt-2 text-center",
-                                        Object.keys(data.node.template).filter(
-                                            (key) =>
-                                                !key.startsWith("_") &&
-                                                data.node.template[key].show &&
-                                                !data.node.template[key].advanced
-                                        ).length === 0
-                                            ? "hidden"
-                                            : ""
-                                    )}
-                                >
-                                    Inputs
-                                </div>
-                            ) : (
-                                <></>
-                            )} */}
-                  {data.node.template[t].show &&
-                  !data.node.template[t].advanced ? (
-                    <ParameterComponent
-                      data={data}
-                      color={
-                        nodeColors[types[data.node.template[t].type]] ??
-                        nodeColors.unknown
-                      }
-                      title={
-                        data.node.template[t].display_name
-                          ? data.node.template[t].display_name
-                          : data.node.template[t].name
-                          ? toTitleCase(data.node.template[t].name)
-                          : toTitleCase(t)
-                      }
-                      name={t}
-                      tooltipTitle={data.node.template[t].type}
-                      required={data.node.template[t].required}
-                      id={data.node.template[t].type + "|" + t + "|" + data.id}
-                      left={true}
-                      type={data.node.template[t].type}
-                    />
+                iconColor={`${nodeColors[types[data.type]]}`}
+              />
+              {showNode && (
+                <div className="generic-node-tooltip-div">
+                  {data.node?.flow && inputName ? (
+                    <div>
+                      <InputComponent
+                        autoFocus
+                        onBlur={() => {
+                          setInputName(false);
+                          if (nodeName.trim() !== "") {
+                            setNodeName(nodeName);
+                            data.node!.display_name = nodeName;
+                          } else {
+                            setNodeName(data.node!.display_name);
+                          }
+                        }}
+                        value={nodeName}
+                        onChange={setNodeName}
+                        password={false}
+                        blurOnEnter={true}
+                      />
+                    </div>
                   ) : (
-                    <></>
+                    <ShadTooltip content={data.node?.display_name}>
+                      <div
+                        className="generic-node-tooltip-div text-primary"
+                        onDoubleClick={() => setInputName(true)}
+                      >
+                        {data.node?.display_name}
+                      </div>
+                    </ShadTooltip>
                   )}
                 </div>
-              ))}
-            <div
-              className={classNames(
-                Object.keys(data.node.template).length < 1 ? "hidden" : "",
-                "flex w-full justify-center"
               )}
-            >
-              {" "}
             </div>
-            {/* <div className="px-5 py-2 mt-2 text-center">
-                  Output
-              </div> */}
-            <ParameterComponent
-              data={data}
-              color={nodeColors[types[data.type]] ?? nodeColors.unknown}
-              title={data.type}
-              tooltipTitle={`${data.node.base_classes.join("\n")}`}
-              id={[data.type, data.id, ...data.node.base_classes].join("|")}
-              type={data.node.base_classes.join("|")}
-              left={false}
-            />
-          </>
+            <div>
+              {!showNode && (
+                <>
+                  {Object.keys(data.node!.template)
+                    .filter((templateField) => templateField.charAt(0) !== "_")
+                    .map(
+                      (templateField: string, idx) =>
+                        data.node!.template[templateField].show &&
+                        !data.node!.template[templateField].advanced && (
+                          <ParameterComponent
+                            index={idx.toString()}
+                            key={scapedJSONStringfy({
+                              inputTypes:
+                                data.node!.template[templateField].input_types,
+                              type: data.node!.template[templateField].type,
+                              id: data.id,
+                              fieldName: templateField,
+                              proxy: data.node!.template[templateField].proxy,
+                            })}
+                            data={data}
+                            setData={setData}
+                            color={
+                              nodeColors[
+                                types[data.node?.template[templateField].type!]
+                              ] ??
+                              nodeColors[
+                                data.node?.template[templateField].type!
+                              ] ??
+                              nodeColors.unknown
+                            }
+                            title={getFieldTitle(
+                              data.node?.template!,
+                              templateField
+                            )}
+                            info={data.node?.template[templateField].info}
+                            name={templateField}
+                            tooltipTitle={
+                              data.node?.template[
+                                templateField
+                              ].input_types?.join("\n") ??
+                              data.node?.template[templateField].type
+                            }
+                            required={
+                              data.node!.template[templateField].required
+                            }
+                            id={{
+                              inputTypes:
+                                data.node!.template[templateField].input_types,
+                              type: data.node!.template[templateField].type,
+                              id: data.id,
+                              fieldName: templateField,
+                            }}
+                            left={true}
+                            type={data.node?.template[templateField].type}
+                            optionalHandle={
+                              data.node?.template[templateField].input_types
+                            }
+                            proxy={data.node?.template[templateField].proxy}
+                            showNode={showNode}
+                          />
+                        )
+                    )}
+                  <ParameterComponent
+                    key={scapedJSONStringfy({
+                      baseClasses: data.node!.base_classes,
+                      id: data.id,
+                      dataType: data.type,
+                    })}
+                    data={data}
+                    setData={setData}
+                    color={nodeColors[types[data.type]] ?? nodeColors.unknown}
+                    title={
+                      data.node?.output_types &&
+                      data.node.output_types.length > 0
+                        ? data.node.output_types.join("|")
+                        : data.type
+                    }
+                    tooltipTitle={data.node?.base_classes.join("\n")}
+                    id={{
+                      baseClasses: data.node!.base_classes,
+                      id: data.id,
+                      dataType: data.type,
+                    }}
+                    type={data.node?.base_classes.join("|")}
+                    left={false}
+                    showNode={showNode}
+                  />
+                </>
+              )}
+            </div>
+
+            {showNode && (
+              <div className="round-button-div">
+                <div>
+                  <Tooltip
+                    title={
+                      isBuilding ? (
+                        <span>Building...</span>
+                      ) : !validationStatus ? (
+                        <span className="flex">
+                          Build{" "}
+                          <IconComponent
+                            name="Zap"
+                            className="mx-0.5 h-5 fill-build-trigger stroke-build-trigger stroke-1"
+                          />{" "}
+                          flow to validate status.
+                        </span>
+                      ) : (
+                        <div className="max-h-96 overflow-auto">
+                          {typeof validationStatus.params === "string"
+                            ? validationStatus.params
+                                .split("\n")
+                                .map((line: string, index: number) => (
+                                  <div key={index}>{line}</div>
+                                ))
+                            : ""}
+                        </div>
+                      )
+                    }
+                  >
+                    <div className="generic-node-status-position">
+                      <div
+                        className={classNames(
+                          validationStatus && validationStatus.valid
+                            ? "green-status"
+                            : "status-build-animation",
+                          "status-div"
+                        )}
+                      ></div>
+                      <div
+                        className={classNames(
+                          validationStatus && !validationStatus.valid
+                            ? "red-status"
+                            : "status-build-animation",
+                          "status-div"
+                        )}
+                      ></div>
+                      <div
+                        className={classNames(
+                          !validationStatus || isBuilding
+                            ? "yellow-status"
+                            : "status-build-animation",
+                          "status-div"
+                        )}
+                      ></div>
+                    </div>
+                  </Tooltip>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+
+        {showNode && (
+          <div
+            className={
+              showNode
+                ? "generic-node-desc " +
+                  (data.node?.description !== "" ? "py-5" : "pb-5")
+                : ""
+            }
+          >
+            {data.node?.description !== "" &&
+            showNode &&
+            data.node?.flow &&
+            inputDescription ? (
+              <Textarea
+                autoFocus
+                onBlur={() => {
+                  setInputDescription(false);
+                  if (nodeDescription.trim() !== "") {
+                    setNodeDescription(nodeDescription);
+                    data.node!.description = nodeDescription;
+                  } else {
+                    setNodeDescription(data.node!.description);
+                  }
+                }}
+                value={nodeDescription}
+                onChange={(e) => setNodeDescription(e.target.value)}
+                onKeyDown={(e) => {
+                  handleKeyDown(e, nodeDescription, "");
+                  if (
+                    e.key === "Enter" &&
+                    e.shiftKey === false &&
+                    e.ctrlKey === false &&
+                    e.altKey === false
+                  ) {
+                    setInputDescription(false);
+                    if (nodeDescription.trim() !== "") {
+                      setNodeDescription(nodeDescription);
+                      data.node!.description = nodeDescription;
+                    } else {
+                      setNodeDescription(data.node!.description);
+                    }
+                  }
+                }}
+              />
+            ) : (
+              <div
+                className="generic-node-desc-text"
+                onDoubleClick={() => setInputDescription(true)}
+              >
+                {data.node?.description}
+              </div>
+            )}
+            <>
+              {Object.keys(data.node!.template)
+                .filter((templateField) => templateField.charAt(0) !== "_")
+                .sort()
+                .map((templateField: string, idx) => (
+                  <div key={idx}>
+                    {data.node!.template[templateField].show &&
+                    !data.node!.template[templateField].advanced ? (
+                      <ParameterComponent
+                        index={idx.toString()}
+                        key={scapedJSONStringfy({
+                          inputTypes:
+                            data.node!.template[templateField].input_types,
+                          type: data.node!.template[templateField].type,
+                          id: data.id,
+                          fieldName: templateField,
+                          proxy: data.node!.template[templateField].proxy,
+                        })}
+                        data={data}
+                        setData={setData}
+                        color={
+                          nodeColors[
+                            types[data.node?.template[templateField].type!]
+                          ] ??
+                          nodeColors[
+                            data.node?.template[templateField].type!
+                          ] ??
+                          nodeColors.unknown
+                        }
+                        title={getFieldTitle(
+                          data.node?.template!,
+                          templateField
+                        )}
+                        info={data.node?.template[templateField].info}
+                        name={templateField}
+                        tooltipTitle={
+                          data.node?.template[templateField].input_types?.join(
+                            "\n"
+                          ) ?? data.node?.template[templateField].type
+                        }
+                        required={data.node!.template[templateField].required}
+                        id={{
+                          inputTypes:
+                            data.node!.template[templateField].input_types,
+                          type: data.node!.template[templateField].type,
+                          id: data.id,
+                          fieldName: templateField,
+                        }}
+                        left={true}
+                        type={data.node?.template[templateField].type}
+                        optionalHandle={
+                          data.node?.template[templateField].input_types
+                        }
+                        proxy={data.node?.template[templateField].proxy}
+                        showNode={showNode}
+                      />
+                    ) : (
+                      <></>
+                    )}
+                  </div>
+                ))}
+              <div
+                className={classNames(
+                  Object.keys(data.node!.template).length < 1 ? "hidden" : "",
+                  "flex-max-width justify-center"
+                )}
+              >
+                {" "}
+              </div>
+              <ParameterComponent
+                key={scapedJSONStringfy({
+                  baseClasses: data.node!.base_classes,
+                  id: data.id,
+                  dataType: data.type,
+                })}
+                data={data}
+                setData={setData}
+                color={nodeColors[types[data.type]] ?? nodeColors.unknown}
+                title={
+                  data.node?.output_types && data.node.output_types.length > 0
+                    ? data.node.output_types.join("|")
+                    : data.type
+                }
+                tooltipTitle={data.node?.base_classes.join("\n")}
+                id={{
+                  baseClasses: data.node!.base_classes,
+                  id: data.id,
+                  dataType: data.type,
+                }}
+                type={data.node?.base_classes.join("|")}
+                left={false}
+                showNode={showNode}
+              />
+            </>
+          </div>
+        )}
       </div>
     </>
   );

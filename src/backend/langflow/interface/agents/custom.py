@@ -1,6 +1,6 @@
 from typing import Any, List, Optional
 
-from langchain import LLMChain
+from langchain.chains.llm import LLMChain
 from langchain.agents import (
     AgentExecutor,
     Tool,
@@ -16,8 +16,10 @@ from langchain.agents.agent_toolkits import (
 )
 from langchain.agents.agent_toolkits.json.prompt import JSON_PREFIX, JSON_SUFFIX
 from langchain.agents.agent_toolkits.json.toolkit import JsonToolkit
-from langchain.agents.agent_toolkits.pandas.prompt import PREFIX as PANDAS_PREFIX
-from langchain.agents.agent_toolkits.pandas.prompt import (
+from langchain_experimental.agents.agent_toolkits.pandas.prompt import (
+    PREFIX as PANDAS_PREFIX,
+)
+from langchain_experimental.agents.agent_toolkits.pandas.prompt import (
     SUFFIX_WITH_DF as PANDAS_SUFFIX,
 )
 from langchain.agents.agent_toolkits.sql.prompt import SQL_PREFIX, SQL_SUFFIX
@@ -31,7 +33,7 @@ from langchain.agents.mrkl.prompt import FORMAT_INSTRUCTIONS
 from langchain.base_language import BaseLanguageModel
 from langchain.memory.chat_memory import BaseChatMemory
 from langchain.sql_database import SQLDatabase
-from langchain.tools.python.tool import PythonAstREPLTool
+from langchain_experimental.tools.python.tool import PythonAstREPLTool
 from langchain.tools.sql_database.prompt import QUERY_CHECKER
 from langflow.interface.base import CustomAgentExecutor
 
@@ -106,9 +108,9 @@ class CSVAgent(CustomAgentExecutor):
             tools,
             prefix=PANDAS_PREFIX,
             suffix=PANDAS_SUFFIX,
-            input_variables=["df", "input", "agent_scratchpad"],
+            input_variables=["df_head", "input", "agent_scratchpad"],
         )
-        partial_prompt = prompt.partial(df=str(df.head()))
+        partial_prompt = prompt.partial(df_head=str(df.head()))
         llm_chain = LLMChain(
             llm=llm,
             prompt=partial_prompt,
@@ -157,7 +159,7 @@ class VectorStoreAgent(CustomAgentExecutor):
             llm_chain=llm_chain, allowed_tools=tool_names, **kwargs  # type: ignore
         )
         return AgentExecutor.from_agent_and_tools(
-            agent=agent, tools=tools, verbose=True
+            agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
         )
 
     def run(self, *args, **kwargs):
@@ -232,6 +234,7 @@ class SQLAgent(CustomAgentExecutor):
             verbose=True,
             max_iterations=15,
             early_stopping_method="force",
+            handle_parsing_errors=True,
         )
 
     def run(self, *args, **kwargs):
@@ -276,7 +279,7 @@ class VectorStoreRouterAgent(CustomAgentExecutor):
             llm_chain=llm_chain, allowed_tools=tool_names, **kwargs  # type: ignore
         )
         return AgentExecutor.from_agent_and_tools(
-            agent=agent, tools=tools, verbose=True
+            agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
         )
 
     def run(self, *args, **kwargs):
@@ -308,6 +311,7 @@ class InitializeAgent(CustomAgentExecutor):
             agent=agent,  # type: ignore
             memory=memory,
             return_intermediate_steps=True,
+            handle_parsing_errors=True,
         )
 
     def __init__(self, *args, **kwargs):

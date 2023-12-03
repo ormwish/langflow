@@ -1,78 +1,57 @@
-import { useContext, useRef, useState } from "react";
-import { alertContext } from "../../contexts/alertContext";
-import { PopUpContext } from "../../contexts/popUpContext";
-import { TabsContext } from "../../contexts/tabsContext";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "../../components/ui/dialog";
-import { Button } from "../../components/ui/button";
-import { SETTINGS_DIALOG_SUBTITLE } from "../../constants";
+import { useContext, useEffect, useState } from "react";
 import EditFlowSettings from "../../components/EditFlowSettingsComponent";
-import { Settings2 } from "lucide-react";
-import { updateFlowInDatabase } from "../../controllers/API";
+import IconComponent from "../../components/genericIconComponent";
+import { Button } from "../../components/ui/button";
+import { SETTINGS_DIALOG_SUBTITLE } from "../../constants/constants";
+import { FlowsContext } from "../../contexts/flowsContext";
+import { FlowSettingsPropsType } from "../../types/components";
+import BaseModal from "../baseModal";
 
-export default function FlowSettingsModal() {
-  const [open, setOpen] = useState(true);
-  const { closePopUp } = useContext(PopUpContext);
-  const { setErrorData, setSuccessData } = useContext(alertContext);
-  const ref = useRef();
-  const { flows, tabId, updateFlow, setTabsState, saveFlow } =
-    useContext(TabsContext);
-  const maxLength = 50;
-  const [name, setName] = useState(flows.find((f) => f.id === tabId).name);
-  const [description, setDescription] = useState(
-    flows.find((f) => f.id === tabId).description
-  );
-  function setModalOpen(x: boolean) {
-    setOpen(x);
-    if (x === false) {
-      setTimeout(() => {
-        closePopUp();
-      }, 300);
-    }
-  }
-  function handleClick() {
-    let savedFlow = flows.find((f) => f.id === tabId);
-    savedFlow.name = name;
-    savedFlow.description = description;
-    saveFlow(savedFlow);
-    setSuccessData({ title: "Changes saved successfully" });
-    closePopUp();
+export default function FlowSettingsModal({
+  open,
+  setOpen,
+}: FlowSettingsPropsType): JSX.Element {
+  const { flows, tabId, updateFlow, saveFlow } = useContext(FlowsContext);
+  const flow = flows.find((f) => f.id === tabId);
+  useEffect(() => {
+    setName(flow!.name);
+    setDescription(flow!.description);
+  }, [flow!.name, flow!.description]);
+  const [name, setName] = useState(flow!.name);
+  const [description, setDescription] = useState(flow!.description);
+  const [invalidName, setInvalidName] = useState(false);
+
+  function handleClick(): void {
+    let savedFlow = flows.find((flow) => flow.id === tabId);
+    savedFlow!.name = name;
+    savedFlow!.description = description;
+    saveFlow(savedFlow!);
+    setOpen(false);
   }
   return (
-    <Dialog open={true} onOpenChange={setModalOpen}>
-      <DialogTrigger asChild></DialogTrigger>
-      <DialogContent className="lg:max-w-[600px] h-[390px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center">
-            <span className="pr-2">Settings </span>
-            <Settings2 className="w-4 h-4 mr-2 " />
-          </DialogTitle>
-          <DialogDescription>{SETTINGS_DIALOG_SUBTITLE}</DialogDescription>
-        </DialogHeader>
-
+    <BaseModal open={open} setOpen={setOpen} size="smaller">
+      <BaseModal.Header description={SETTINGS_DIALOG_SUBTITLE}>
+        <span className="pr-2">Settings</span>
+        <IconComponent name="Settings2" className="mr-2 h-4 w-4 " />
+      </BaseModal.Header>
+      <BaseModal.Content>
         <EditFlowSettings
+          invalidName={invalidName}
+          setInvalidName={setInvalidName}
           name={name}
           description={description}
           flows={flows}
           tabId={tabId}
           setName={setName}
           setDescription={setDescription}
-          updateFlow={updateFlow}
         />
+      </BaseModal.Content>
 
-        <DialogFooter>
-          <Button onClick={handleClick} type="submit">
-            Save
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <BaseModal.Footer>
+        <Button disabled={invalidName} onClick={handleClick} type="submit">
+          Save
+        </Button>
+      </BaseModal.Footer>
+    </BaseModal>
   );
 }

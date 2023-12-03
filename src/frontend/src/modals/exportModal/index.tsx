@@ -1,97 +1,106 @@
-import { useContext, useRef, useState } from "react";
-import { alertContext } from "../../contexts/alertContext";
-import { PopUpContext } from "../../contexts/popUpContext";
-import { TabsContext } from "../../contexts/tabsContext";
-import { removeApiKeys } from "../../utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "../../components/ui/dialog";
+import { ReactNode, forwardRef, useContext, useEffect, useState } from "react";
+import EditFlowSettings from "../../components/EditFlowSettingsComponent";
+import IconComponent from "../../components/genericIconComponent";
 import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
-import { EXPORT_DIALOG_SUBTITLE } from "../../constants";
-import { Download } from "lucide-react";
-import EditFlowSettings from "../../components/EditFlowSettingsComponent";
+import { EXPORT_DIALOG_SUBTITLE } from "../../constants/constants";
+import { alertContext } from "../../contexts/alertContext";
+import { FlowsContext } from "../../contexts/flowsContext";
+import { typesContext } from "../../contexts/typesContext";
+import { removeApiKeys } from "../../utils/reactflowUtils";
+import BaseModal from "../baseModal";
 
-export default function ExportModal() {
-  const [open, setOpen] = useState(true);
-  const { closePopUp } = useContext(PopUpContext);
-  const ref = useRef();
-  const { setErrorData } = useContext(alertContext);
-  const { flows, tabId, updateFlow, downloadFlow } = useContext(TabsContext);
-  const [isMaxLength, setIsMaxLength] = useState(false);
-  function setModalOpen(x: boolean) {
-    setOpen(x);
-    if (x === false) {
-      setTimeout(() => {
-        closePopUp();
-      }, 300);
-    }
-  }
-  const [checked, setChecked] = useState(false);
-  const [name, setName] = useState(flows.find((f) => f.id === tabId).name);
-  const [description, setDescription] = useState(
-    flows.find((f) => f.id === tabId).description
-  );
-  return (
-    <Dialog open={true} onOpenChange={setModalOpen}>
-      <DialogTrigger asChild></DialogTrigger>
-      <DialogContent className="lg:max-w-[600px] h-[420px] ">
-        <DialogHeader>
-          <DialogTitle className="flex items-center">
-            <span className="pr-2">Export</span>
-            <Download
-              className="h-6 w-6 text-foreground pl-1"
-              aria-hidden="true"
-            />
-          </DialogTitle>
-          <DialogDescription>{EXPORT_DIALOG_SUBTITLE}</DialogDescription>
-        </DialogHeader>
+const ExportModal = forwardRef(
+  (props: { children: ReactNode }, ref): JSX.Element => {
+    const { flows, tabId, downloadFlow } = useContext(FlowsContext);
+    const { reactFlowInstance } = useContext(typesContext);
+    const { setNoticeData } = useContext(alertContext);
+    const [checked, setChecked] = useState(true);
+    const flow = flows.find((f) => f.id === tabId);
+    useEffect(() => {
+      setName(flow!.name);
+      setDescription(flow!.description);
+    }, [flow!.name, flow!.description]);
+    const [name, setName] = useState(flow!.name);
+    const [description, setDescription] = useState(flow!.description);
+    const [open, setOpen] = useState(false);
 
-        <EditFlowSettings
-          name={name}
-          description={description}
-          flows={flows}
-          tabId={tabId}
-          setName={setName}
-          setDescription={setDescription}
-          updateFlow={updateFlow}
-        />
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="terms"
-            onCheckedChange={(event: boolean) => {
-              setChecked(event);
-            }}
+    return (
+      <BaseModal size="smaller" open={open} setOpen={setOpen}>
+        <BaseModal.Trigger>{props.children}</BaseModal.Trigger>
+        <BaseModal.Header description={EXPORT_DIALOG_SUBTITLE}>
+          <span className="pr-2">Export</span>
+          <IconComponent
+            name="Download"
+            className="h-6 w-6 pl-1 text-foreground"
+            aria-hidden="true"
           />
-          <label
-            htmlFor="terms"
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-          >
-            Save with my API keys
-          </label>
-        </div>
+        </BaseModal.Header>
+        <BaseModal.Content>
+          <EditFlowSettings
+            name={name}
+            description={description}
+            flows={flows}
+            tabId={tabId}
+            setName={setName}
+            setDescription={setDescription}
+          />
+          <div className="mt-3 flex items-center space-x-2">
+            <Checkbox
+              id="terms"
+              checked={checked}
+              onCheckedChange={(event: boolean) => {
+                setChecked(event);
+              }}
+            />
+            <label htmlFor="terms" className="export-modal-save-api text-sm ">
+              Save with my API keys
+            </label>
+          </div>
+          <span className="text-xs text-destructive">
+            Caution: Uncheck this box only removes API keys from fields
+            specifically designated for API keys.
+          </span>
+        </BaseModal.Content>
 
-        <DialogFooter>
+        <BaseModal.Footer>
           <Button
             onClick={() => {
-              if (checked) downloadFlow(flows.find((f) => f.id === tabId));
-              else
-                downloadFlow(removeApiKeys(flows.find((f) => f.id === tabId)));
-
-              closePopUp();
+              if (checked) {
+                downloadFlow(
+                  {
+                    id: tabId,
+                    data: reactFlowInstance?.toObject()!,
+                    description,
+                    name,
+                  },
+                  name!,
+                  description
+                );
+                setNoticeData({
+                  title:
+                    "Warning: Critical data, JSON file may include API keys.",
+                });
+              } else
+                downloadFlow(
+                  removeApiKeys({
+                    id: tabId,
+                    data: reactFlowInstance?.toObject()!,
+                    description,
+                    name,
+                  }),
+                  name!,
+                  description
+                );
+              setOpen(false);
             }}
             type="submit"
           >
             Download Flow
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+        </BaseModal.Footer>
+      </BaseModal>
+    );
+  }
+);
+export default ExportModal;

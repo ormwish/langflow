@@ -1,13 +1,13 @@
 import { Transition } from "@headlessui/react";
 import { useEffect, useState } from "react";
+import IconComponent from "../../components/genericIconComponent";
 import { SuccessAlertType } from "../../types/alerts";
-import { CheckCircle2 } from "lucide-react";
 
 export default function SuccessAlert({
   title,
   id,
   removeAlert,
-}: SuccessAlertType) {
+}: SuccessAlertType): JSX.Element {
   const [show, setShow] = useState(true);
   useEffect(() => {
     if (show) {
@@ -34,19 +34,18 @@ export default function SuccessAlert({
           setShow(false);
           removeAlert(id);
         }}
-        className="rounded-md w-96 mt-6 shadow-xl bg-success-background p-4"
+        className="success-alert"
       >
         <div className="flex">
           <div className="flex-shrink-0">
-            <CheckCircle2
-              className="h-5 w-5 text-status-green"
+            <IconComponent
+              name="CheckCircle2"
+              className="success-alert-icon"
               aria-hidden="true"
             />
           </div>
           <div className="ml-3">
-            <p className="text-sm font-medium text-success-foreground">
-              {title}
-            </p>
+            <p className="success-alert-message">{title}</p>
           </div>
         </div>
       </div>

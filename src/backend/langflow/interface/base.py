@@ -2,12 +2,14 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Type, Union
 from langchain.chains.base import Chain
 from langchain.agents import AgentExecutor
+from langflow.services.getters import get_settings_service
 from pydantic import BaseModel
 
 from langflow.template.field.base import TemplateField
 from langflow.template.frontend_node.base import FrontendNode
 from langflow.template.template.base import Template
-from langflow.utils.logger import logger
+from loguru import logger
+
 
 # Assuming necessary imports for Field, Template, and FrontendNode classes
 
@@ -15,11 +17,31 @@ from langflow.utils.logger import logger
 class LangChainTypeCreator(BaseModel, ABC):
     type_name: str
     type_dict: Optional[Dict] = None
+    name_docs_dict: Optional[Dict[str, str]] = None
 
     @property
     def frontend_node_class(self) -> Type[FrontendNode]:
         """The class type of the FrontendNode created in frontend_node."""
         return FrontendNode
+
+    @property
+    def docs_map(self) -> Dict[str, str]:
+        """A dict with the name of the component as key and the documentation link as value."""
+        settings_service = get_settings_service()
+        if self.name_docs_dict is None:
+            try:
+                type_settings = getattr(
+                    settings_service.settings, self.type_name.upper()
+                )
+                self.name_docs_dict = {
+                    name: value_dict["documentation"]
+                    for name, value_dict in type_settings.items()
+                }
+            except AttributeError as exc:
+                logger.error(f"Error getting settings for {self.type_name}: {exc}")
+
+                self.name_docs_dict = {}
+        return self.name_docs_dict
 
     @property
     @abstractmethod
@@ -83,7 +105,7 @@ class LangChainTypeCreator(BaseModel, ABC):
 
         signature.add_extra_fields()
         signature.add_extra_base_classes()
-
+        signature.set_documentation(self.docs_map.get(name, ""))
         return signature
 
 

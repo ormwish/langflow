@@ -49,6 +49,10 @@ class ChainFrontendNode(FrontendNode):
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
         FrontendNode.format_field(field, name)
 
+        if "name" == "RetrievalQA" and field.name == "memory":
+            field.show = False
+            field.required = False
+
         field.advanced = False
         if "key" in field.name:
             field.password = False
@@ -77,12 +81,14 @@ class ChainFrontendNode(FrontendNode):
             field.advanced = False
         if field.name == "verbose":
             field.required = False
-            field.show = True
+            field.show = False
             field.advanced = True
         if field.name == "llm":
             field.required = True
             field.show = True
             field.advanced = False
+            field.field_type = "BaseLanguageModel"  # temporary fix
+            field.is_list = False
 
         if field.name == "return_source_documents":
             field.required = False
@@ -136,7 +142,7 @@ class SeriesCharacterChainNode(FrontendNode):
         "Chain",
         "ConversationChain",
         "SeriesCharacterChain",
-        "function",
+        "Callable",
     ]
 
 
@@ -237,7 +243,7 @@ class CombineDocsChainNode(FrontendNode):
         ],
     )
     description: str = """Load question answering chain."""
-    base_classes: list[str] = ["BaseCombineDocumentsChain", "function"]
+    base_classes: list[str] = ["BaseCombineDocumentsChain", "Callable"]
 
     def to_dict(self):
         return super().to_dict()

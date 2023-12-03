@@ -1,16 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useNodes } from "reactflow";
 import { ChatType } from "../../types/chat";
-import ChatTrigger from "./chatTrigger";
 import BuildTrigger from "./buildTrigger";
-import ChatModal from "../../modals/chatModal";
+import ChatTrigger from "./chatTrigger";
 
+import * as _ from "lodash";
+import { FlowsContext } from "../../contexts/flowsContext";
 import { getBuildStatus } from "../../controllers/API";
+import FormModal from "../../modals/formModal";
 import { NodeType } from "../../types/flow";
 
-export default function Chat({ flow }: ChatType) {
+export default function Chat({ flow }: ChatType): JSX.Element {
   const [open, setOpen] = useState(false);
-  const [isBuilt, setIsBuilt] = useState(false);
+  const [canOpen, setCanOpen] = useState(false);
+  const { tabsState, isBuilt, setIsBuilt } = useContext(FlowsContext);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -41,44 +44,61 @@ export default function Chat({ flow }: ChatType) {
   }, [flow]);
 
   const prevNodesRef = useRef<any[] | undefined>();
-  const nodes = useNodes();
+  const nodes: NodeType[] = useNodes();
   useEffect(() => {
     const prevNodes = prevNodesRef.current;
-    const currentNodes = nodes.map(
-      (node: NodeType) => node.data.node.template.value
+    const currentNodes = nodes.map((node: NodeType) =>
+      _.cloneDeep(node.data.node?.template)
     );
-
     if (
-      prevNodes &&
+      tabsState &&
+      tabsState[flow.id] &&
+      tabsState[flow.id].isPending &&
       JSON.stringify(prevNodes) !== JSON.stringify(currentNodes)
     ) {
       setIsBuilt(false);
     }
+    if (
+      tabsState &&
+      tabsState[flow.id] &&
+      tabsState[flow.id].formKeysData &&
+      tabsState[flow.id].formKeysData.input_keys !== null
+    ) {
+      setCanOpen(true);
+    } else {
+      setCanOpen(false);
+    }
 
     prevNodesRef.current = currentNodes;
-  }, [nodes]);
+  }, [tabsState, flow.id]);
 
   return (
     <>
-      {isBuilt ? (
-        <div>
-          <BuildTrigger
-            open={open}
-            flow={flow}
-            setIsBuilt={setIsBuilt}
-            isBuilt={isBuilt}
-          />
-          <ChatModal key={flow.id} flow={flow} open={open} setOpen={setOpen} />
-          <ChatTrigger open={open} setOpen={setOpen} isBuilt={isBuilt} />
-        </div>
-      ) : (
+      <div>
         <BuildTrigger
           open={open}
           flow={flow}
           setIsBuilt={setIsBuilt}
           isBuilt={isBuilt}
         />
-      )}
+        {isBuilt &&
+          tabsState[flow.id] &&
+          tabsState[flow.id].formKeysData &&
+          canOpen && (
+            <FormModal
+              key={flow.id}
+              flow={flow}
+              open={open}
+              setOpen={setOpen}
+            />
+          )}
+        <ChatTrigger
+          canOpen={canOpen}
+          open={open}
+          setOpen={setOpen}
+          isBuilt={isBuilt}
+        />
+      </div>
     </>
   );
 }

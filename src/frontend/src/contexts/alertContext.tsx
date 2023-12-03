@@ -1,34 +1,15 @@
 import { createContext, ReactNode, useState } from "react";
 import { AlertItemType } from "../types/alerts";
+import { alertContextType } from "../types/typesContext";
 
 import _ from "lodash";
-
-//types for alertContextType
-type alertContextType = {
-  errorData: { title: string; list?: Array<string> };
-  setErrorData: (newState: { title: string; list?: Array<string> }) => void;
-  errorOpen: boolean;
-  setErrorOpen: (newState: boolean) => void;
-  noticeData: { title: string; link?: string };
-  setNoticeData: (newState: { title: string; link?: string }) => void;
-  noticeOpen: boolean;
-  setNoticeOpen: (newState: boolean) => void;
-  successData: { title: string };
-  setSuccessData: (newState: { title: string }) => void;
-  successOpen: boolean;
-  setSuccessOpen: (newState: boolean) => void;
-  notificationCenter: boolean;
-  setNotificationCenter: (newState: boolean) => void;
-  notificationList: Array<AlertItemType>;
-  pushNotificationList: (Object: AlertItemType) => void;
-  clearNotificationList: () => void;
-  removeFromNotificationList: (index: string) => void;
-};
 
 //initial values to alertContextType
 const initialValue: alertContextType = {
   errorData: { title: "", list: [] },
   setErrorData: () => {},
+  loading: true,
+  setLoading: () => {},
   errorOpen: false,
   setErrorOpen: () => {},
   noticeData: { title: "", link: "" },
@@ -55,6 +36,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
     list?: Array<string>;
   }>({ title: "", list: [] });
   const [errorOpen, setErrorOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [noticeData, setNoticeDataState] = useState<{
     title: string;
     link?: string;
@@ -65,7 +47,8 @@ export function AlertProvider({ children }: { children: ReactNode }) {
   });
   const [successOpen, setSuccessOpen] = useState(false);
   const [notificationCenter, setNotificationCenter] = useState(false);
-  const [notificationList, setNotificationList] = useState([]);
+  const [notificationList, setNotificationList] = useState<AlertItemType[]>([]);
+  const [isTweakPage, setIsTweakPage] = useState<boolean>(false);
   const pushNotificationList = (notification: AlertItemType) => {
     setNotificationList((old) => {
       let newNotificationList = _.cloneDeep(old);
@@ -78,9 +61,9 @@ export function AlertProvider({ children }: { children: ReactNode }) {
    * @param newState An object containing the new error data, including title and optional list of error messages
    */
   function setErrorData(newState: { title: string; list?: Array<string> }) {
-    setErrorDataState(newState);
-    setErrorOpen(true);
     if (newState.title && newState.title !== "") {
+      setErrorDataState(newState);
+      setErrorOpen(true);
       setNotificationCenter(true);
       pushNotificationList({
         type: "error",
@@ -95,9 +78,9 @@ export function AlertProvider({ children }: { children: ReactNode }) {
    * @param newState An object containing the title of the notice and optionally a link.
    */
   function setNoticeData(newState: { title: string; link?: string }) {
-    setNoticeDataState(newState);
-    setNoticeOpen(true);
     if (newState.title && newState.title !== "") {
+      setNoticeDataState(newState);
+      setNoticeOpen(true);
       // Add new notice to notification center
       setNotificationCenter(true);
       pushNotificationList({
@@ -113,11 +96,10 @@ export function AlertProvider({ children }: { children: ReactNode }) {
    * @param newState - A state object with a "title" property to set in the success data state.
    */
   function setSuccessData(newState: { title: string }) {
-    setSuccessDataState(newState); // update the success data state with the provided new state
-    setSuccessOpen(true); // open the success alert
-
     // If the new state has a "title" property, add a new success notification to the list
     if (newState.title && newState.title !== "") {
+      setSuccessDataState(newState); // update the success data state with the provided new state
+      setSuccessOpen(true); // open the success alert
       setNotificationCenter(true); // show the notification center
       pushNotificationList({
         // add the new notification to the list
@@ -142,6 +124,8 @@ export function AlertProvider({ children }: { children: ReactNode }) {
         removeFromNotificationList,
         clearNotificationList,
         notificationList,
+        loading,
+        setLoading,
         pushNotificationList,
         setNotificationCenter,
         notificationCenter,

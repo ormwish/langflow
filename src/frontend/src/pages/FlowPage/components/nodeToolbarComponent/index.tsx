@@ -1,183 +1,252 @@
 import { useContext, useState } from "react";
-import { Settings2, Copy, Trash2, Menu } from "lucide-react";
-import { classNames } from "../../../../utils";
-import { TabsContext } from "../../../../contexts/tabsContext";
-import { useReactFlow } from "reactflow";
-import EditNodeModal from "../../../../modals/EditNodeModal";
+import { useReactFlow, useUpdateNodeInternals } from "reactflow";
 import ShadTooltip from "../../../../components/ShadTooltipComponent";
-import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
+import IconComponent from "../../../../components/genericIconComponent";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "../../../../components/ui/select-custom";
+import { FlowsContext } from "../../../../contexts/flowsContext";
+import EditNodeModal from "../../../../modals/EditNodeModal";
+import { nodeToolbarPropsType } from "../../../../types/components";
+import {
+  expandGroupNode,
+  updateFlowPosition,
+} from "../../../../utils/reactflowUtils";
+import { classNames, getRandomKeyByssmm } from "../../../../utils/utils";
 
-const NodeToolbarComponent = (props) => {
+export default function NodeToolbarComponent({
+  data,
+  setData,
+  deleteNode,
+  position,
+  setShowNode,
+  numberOfHandles,
+  showNode,
+}: nodeToolbarPropsType): JSX.Element {
   const [nodeLength, setNodeLength] = useState(
-    Object.keys(props.data.node.template).filter(
-      (t) =>
-        t.charAt(0) !== "_" &&
-        props.data.node.template[t].show &&
-        (props.data.node.template[t].type === "str" ||
-          props.data.node.template[t].type === "bool" ||
-          props.data.node.template[t].type === "float" ||
-          props.data.node.template[t].type === "code" ||
-          props.data.node.template[t].type === "prompt" ||
-          props.data.node.template[t].type === "file" ||
-          props.data.node.template[t].type === "Any" ||
-          props.data.node.template[t].type === "int")
+    Object.keys(data.node!.template).filter(
+      (templateField) =>
+        templateField.charAt(0) !== "_" &&
+        data.node?.template[templateField].show &&
+        (data.node.template[templateField].type === "str" ||
+          data.node.template[templateField].type === "bool" ||
+          data.node.template[templateField].type === "float" ||
+          data.node.template[templateField].type === "code" ||
+          data.node.template[templateField].type === "prompt" ||
+          data.node.template[templateField].type === "file" ||
+          data.node.template[templateField].type === "Any" ||
+          data.node.template[templateField].type === "int")
     ).length
   );
+  const updateNodeInternals = useUpdateNodeInternals();
 
-  const { setLastCopiedSelection, paste } = useContext(TabsContext);
+  function canMinimize() {
+    let countHandles: number = 0;
+    numberOfHandles.forEach((bool) => {
+      if (bool) countHandles += 1;
+    });
+    if (countHandles > 1) return false;
+    return true;
+  }
+  const isMinimal = canMinimize();
+  const isGroup = data.node?.flow ? true : false;
+
+  const { paste } = useContext(FlowsContext);
   const reactFlowInstance = useReactFlow();
+  const [showModalAdvanced, setShowModalAdvanced] = useState(false);
+  const [selectedValue, setSelectedValue] = useState("");
+
+  const handleSelectChange = (event) => {
+    setSelectedValue(event);
+    if (event.includes("advanced")) {
+      return setShowModalAdvanced(true);
+    }
+    setShowModalAdvanced(false);
+    if (event.includes("show")) {
+      setShowNode((prev) => !prev);
+      updateNodeInternals(data.id);
+    }
+    if (event.includes("disabled")) {
+      return;
+    }
+    if (event.includes("ungroup")) {
+      updateFlowPosition(position, data.node?.flow!);
+      expandGroupNode(data, reactFlowInstance);
+    }
+  };
+
   return (
     <>
-      <div className="h-10 w-26">
+      <div className="w-26 h-10">
         <span className="isolate inline-flex rounded-md shadow-sm">
-          <ShadTooltip delayDuration={1000} content="Delete" side="top">
+          <ShadTooltip content="Delete" side="top">
             <button
-              className="text-foreground transition-all duration-500 ease-in-out  shadow-md relative inline-flex items-center rounded-l-md bg-background px-2 py-2 ring-1 ring-inset ring-ring hover:bg-muted focus:z-10"
+              className="relative inline-flex items-center rounded-l-md  bg-background px-2 py-2 text-foreground shadow-md ring-1 ring-inset ring-ring transition-all duration-500 ease-in-out hover:bg-muted focus:z-10"
               onClick={() => {
-                props.deleteNode(props.data.id);
+                deleteNode(data.id);
               }}
             >
-              <Trash2 className="w-4 h-4 "></Trash2>
+              <IconComponent name="Trash2" className="h-4 w-4" />
             </button>
           </ShadTooltip>
 
-          <ShadTooltip delayDuration={1000} content="Duplicate" side="top">
+          <ShadTooltip content="Duplicate" side="top">
             <button
               className={classNames(
-                nodeLength > 0
-                  ? "text-foreground transition-all duration-500 ease-in-out shadow-md relative -ml-px inline-flex items-center bg-background px-2 py-2  ring-1 ring-inset ring-ring hover:bg-muted focus:z-10"
-                  : "text-foreground transition-all duration-500 ease-in-out shadow-md relative -ml-px inline-flex items-center bg-background px-2 py-2  ring-1 ring-inset ring-ring hover:bg-muted focus:z-10 rounded-r-md"
+                "relative -ml-px inline-flex items-center bg-background px-2 py-2 text-foreground shadow-md ring-1 ring-inset ring-ring  transition-all duration-500 ease-in-out hover:bg-muted focus:z-10"
               )}
               onClick={(event) => {
                 event.preventDefault();
-                // console.log(reactFlowInstance.getNode(props.data.id));
                 paste(
                   {
-                    nodes: [reactFlowInstance.getNode(props.data.id)],
+                    nodes: [reactFlowInstance.getNode(data.id)],
                     edges: [],
                   },
                   {
                     x: 50,
                     y: 10,
-                    paneX: reactFlowInstance.getNode(props.data.id).position.x,
-                    paneY: reactFlowInstance.getNode(props.data.id).position.y,
+                    paneX: reactFlowInstance.getNode(data.id)?.position.x,
+                    paneY: reactFlowInstance.getNode(data.id)?.position.y,
                   }
                 );
               }}
             >
-              <Copy className="w-4 h-4 "></Copy>
+              <IconComponent name="Copy" className="h-4 w-4" />
             </button>
           </ShadTooltip>
 
-          {nodeLength > 0 && (
-            <ShadTooltip delayDuration={1000} content="Edit" side="top">
-              <button
-                className="text-foreground transition-all duration-500 ease-in-out shadow-md relative -ml-px inline-flex items-center bg-background px-2 py-2 ring-1 ring-inset ring-ring hover:bg-muted focus:z-10 rounded-r-md"
-                onClick={(event) => {
+          <ShadTooltip
+            content={
+              data.node?.documentation === "" ? "Coming Soon" : "Documentation"
+            }
+            side="top"
+          >
+            <a
+              className={classNames(
+                "relative -ml-px inline-flex items-center bg-background px-2 py-2 text-foreground shadow-md ring-1 ring-inset ring-ring  transition-all duration-500 ease-in-out hover:bg-muted focus:z-10" +
+                  (data.node?.documentation === ""
+                    ? " text-muted-foreground"
+                    : " text-foreground")
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              href={data.node?.documentation}
+              // deactivate link if no documentation is provided
+              onClick={(event) => {
+                if (data.node?.documentation === "") {
                   event.preventDefault();
-                  props.openPopUp(<EditNodeModal data={props.data} />);
-                }}
-              >
-                <Settings2 className="w-4 h-4 "></Settings2>
-              </button>
+                }
+              }}
+            >
+              <IconComponent name="FileText" className="h-4 w-4 " />
+            </a>
+          </ShadTooltip>
+
+          {isMinimal || isGroup ? (
+            <Select onValueChange={handleSelectChange} value={selectedValue}>
+              <ShadTooltip content="More" side="top">
+                <SelectTrigger>
+                  <div id="advancedIcon">
+                    <div
+                      className={classNames(
+                        "relative -ml-px inline-flex h-8 w-[31px] items-center rounded-r-md bg-background text-foreground shadow-md ring-1 ring-inset  ring-ring transition-all duration-500 ease-in-out hover:bg-muted focus:z-10" +
+                          (nodeLength == 0
+                            ? " text-muted-foreground"
+                            : " text-foreground")
+                      )}
+                    >
+                      <IconComponent
+                        name="MoreHorizontal"
+                        className="relative left-2 h-4 w-4"
+                      />
+                    </div>
+                  </div>
+                </SelectTrigger>
+              </ShadTooltip>
+              <SelectContent>
+                <SelectItem
+                  value={
+                    getRandomKeyByssmm() +
+                    (nodeLength == 0 ? "disabled" : "advanced")
+                  }
+                >
+                  <div
+                    id="editAdvancedBtn"
+                    className={
+                      "flex " +
+                      (nodeLength == 0
+                        ? "text-muted-foreground"
+                        : "text-primary")
+                    }
+                  >
+                    <IconComponent
+                      name="Settings2"
+                      className="relative top-0.5 mr-2 h-4 w-4"
+                    />{" "}
+                    Edit{" "}
+                  </div>{" "}
+                </SelectItem>
+                {isMinimal && (
+                  <SelectItem value={getRandomKeyByssmm() + "show"}>
+                    <div className="flex" id="editAdvanced">
+                      <IconComponent
+                        name={showNode ? "Minimize2" : "Maximize2"}
+                        className="relative top-0.5 mr-2 h-4 w-4"
+                      />
+                      {showNode ? "Minimize" : "Expand"}
+                    </div>
+                  </SelectItem>
+                )}
+                {isGroup && (
+                  <SelectItem value={getRandomKeyByssmm() + "ungroup"}>
+                    <div className="flex">
+                      <IconComponent
+                        name="Ungroup"
+                        className="relative top-0.5 mr-2 h-4 w-4"
+                      />{" "}
+                      Ungroup{" "}
+                    </div>
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          ) : (
+            <ShadTooltip content="Edit" side="top">
+              <div id="editAdvancedIcon">
+                <button
+                  disabled={nodeLength === 0}
+                  onClick={() => setShowModalAdvanced(true)}
+                  className={classNames(
+                    "relative -ml-px inline-flex items-center rounded-r-md bg-background px-2 py-2 text-foreground shadow-md ring-1  ring-inset ring-ring transition-all duration-500 ease-in-out hover:bg-muted focus:z-10" +
+                      (nodeLength == 0
+                        ? " text-muted-foreground"
+                        : " text-foreground")
+                  )}
+                >
+                  <IconComponent name="Settings2" className="h-4 w-4 " />
+                </button>
+              </div>
             </ShadTooltip>
           )}
 
-          {/* <Menu as="div" className="relative inline-block text-left z-100">
-            <button className="text-gray-700 transition-all duration-500 ease-in-out   shadow-md relative -ml-px inline-flex items-center bg-background px-2 py-2 ring-1 ring-inset ring-gray-300 hover:bg-muted focus:z-10 rounded-r-md">
-              <div>
-                <Menu.Button className="flex items-center">
-                  <EllipsisVerticalIcon
-                    className="w-5 h-5 "
-                    aria-hidden="true"
-                  />
-                </Menu.Button>
-              </div>
-
-              <Transition
-                as={Fragment}
-                enter="transition ease-out duration-100"
-                enterFrom="transform opacity-0 scale-95"
-                enterTo="transform opacity-100 scale-100"
-                leave="transition ease-in duration-75"
-                leaveFrom="transform opacity-100 scale-100"
-                leaveTo="transform opacity-0 scale-95"
-              >
-                <Menu.Items className="absolute z-40 mt-2 w-56 origin-top-right rounded-md bg-background shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none top-[28px]">
-                  <div className="py-1">
-                    <Menu.Item>
-                      {({ active }) => (
-                        <button
-                          onClick={(event) => {
-                            event.preventDefault();
-                            props.openPopUp(
-                              <EditNodeModal data={props.data} />
-                            );
-                          }}
-                          className={classNames(
-                            active
-                              ? "bg-muted text-gray-900"
-                              : "text-gray-700",
-                            "w-full group flex items-center px-4 py-2 text-sm"
-                          )}
-                        >
-                          <Settings
-                            className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500"
-                            aria-hidden="true"
-                          />
-                          Edit
-                        </button>
-                      )}
-                    </Menu.Item>
-                    <Menu.Item>
-                      {({ active }) => (
-                        <button
-                          onClick={(event) => {
-                            event.preventDefault();
-                            console.log(
-                              reactFlowInstance.getNode(props.data.id)
-                            );
-                            paste(
-                              {
-                                nodes: [
-                                  reactFlowInstance.getNode(props.data.id),
-                                ],
-                                edges: [],
-                              },
-                              {
-                                x: 50,
-                                y: 10,
-                                paneX: reactFlowInstance.getNode(props.data.id)
-                                  .position.x,
-                                paneY: reactFlowInstance.getNode(props.data.id)
-                                  .position.y,
-                              }
-                            );
-                          }}
-                          className={classNames(
-                            active
-                              ? "bg-muted text-gray-900"
-                              : "text-gray-700",
-                            "w-full group flex items-center px-4 py-2 text-sm"
-                          )}
-                        >
-                          <DocumentDuplicateIcon
-                            className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500"
-                            aria-hidden="true"
-                          />
-                          Duplicate
-                        </button>
-                      )}
-                    </Menu.Item>
-                  </div>
-                </Menu.Items>
-              </Transition>
-            </button>
-          </Menu> */}
+          {showModalAdvanced && (
+            <EditNodeModal
+              data={data}
+              setData={setData}
+              nodeLength={nodeLength}
+              open={showModalAdvanced}
+              onClose={(modal) => {
+                setShowModalAdvanced(modal);
+              }}
+            >
+              <></>
+            </EditNodeModal>
+          )}
         </span>
       </div>
     </>
   );
-};
-
-export default NodeToolbarComponent;
+}

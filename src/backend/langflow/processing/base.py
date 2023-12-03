@@ -1,44 +1,92 @@
+from typing import List, Union, TYPE_CHECKING
 from langflow.api.v1.callback import (
     AsyncStreamingLLMCallbackHandler,
     StreamingLLMCallbackHandler,
 )
 from langflow.processing.process import fix_memory_inputs, format_actions
-from langflow.utils.logger import logger
+from loguru import logger
+from langchain.agents.agent import AgentExecutor
+from langchain.callbacks.base import BaseCallbackHandler
+
+if TYPE_CHECKING:
+    from langfuse.callback import CallbackHandler  # type: ignore
 
 
-async def get_result_and_steps(langchain_object, message: str, **kwargs):
+def setup_callbacks(sync, trace_id, **kwargs):
+    """Setup callbacks for langchain object"""
+    callbacks = []
+    if sync:
+        callbacks.append(StreamingLLMCallbackHandler(**kwargs))
+    else:
+        callbacks.append(AsyncStreamingLLMCallbackHandler(**kwargs))
+
+    if langfuse_callback := get_langfuse_callback(trace_id=trace_id):
+        logger.debug("Langfuse callback loaded")
+        callbacks.append(langfuse_callback)
+    return callbacks
+
+
+def get_langfuse_callback(trace_id):
+    from langflow.services.plugins.langfuse import LangfuseInstance
+    from langfuse.callback import CreateTrace
+
+    logger.debug("Initializing langfuse callback")
+    if langfuse := LangfuseInstance.get():
+        logger.debug("Langfuse credentials found")
+        try:
+            trace = langfuse.trace(
+                CreateTrace(name="langflow-" + trace_id, id=trace_id)
+            )
+            return trace.getNewHandler()
+        except Exception as exc:
+            logger.error(f"Error initializing langfuse callback: {exc}")
+
+    return None
+
+
+def flush_langfuse_callback_if_present(
+    callbacks: List[Union[BaseCallbackHandler, "CallbackHandler"]]
+):
+    """
+    If langfuse callback is present, run callback.langfuse.flush()
+    """
+    for callback in callbacks:
+        if hasattr(callback, "langfuse"):
+            callback.langfuse.flush()
+            break
+
+
+async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwargs):
     """Get result and thought from extracted json"""
 
     try:
         if hasattr(langchain_object, "verbose"):
             langchain_object.verbose = True
-        chat_input = None
-        memory_key = ""
-        if hasattr(langchain_object, "memory") and langchain_object.memory is not None:
-            memory_key = langchain_object.memory.memory_key
-
-        if hasattr(langchain_object, "input_keys"):
-            for key in langchain_object.input_keys:
-                if key not in [memory_key, "chat_history"]:
-                    chat_input = {key: message}
-        else:
-            chat_input = message  # type: ignore
 
         if hasattr(langchain_object, "return_intermediate_steps"):
             # https://github.com/hwchase17/langchain/issues/2068
             # Deactivating until we have a frontend solution
             # to display intermediate steps
             langchain_object.return_intermediate_steps = True
-
-        fix_memory_inputs(langchain_object)
         try:
-            async_callbacks = [AsyncStreamingLLMCallbackHandler(**kwargs)]
-            output = await langchain_object.acall(chat_input, callbacks=async_callbacks)
+            if not isinstance(langchain_object, AgentExecutor):
+                fix_memory_inputs(langchain_object)
+        except Exception as exc:
+            logger.error(f"Error fixing memory inputs: {exc}")
+
+        try:
+            trace_id = kwargs.pop("session_id", None)
+            callbacks = setup_callbacks(sync=False, trace_id=trace_id, **kwargs)
+            output = await langchain_object.acall(inputs, callbacks=callbacks)
         except Exception as exc:
             # make the error message more informative
             logger.debug(f"Error: {str(exc)}")
-            sync_callbacks = [StreamingLLMCallbackHandler(**kwargs)]
-            output = langchain_object(chat_input, callbacks=sync_callbacks)
+            trace_id = kwargs.pop("session_id", None)
+            callbacks = setup_callbacks(sync=True, trace_id=trace_id, **kwargs)
+            output = langchain_object(inputs, callbacks=callbacks)
+
+        # if langfuse callback is present, run callback.langfuse.flush()
+        flush_langfuse_callback_if_present(callbacks)
 
         intermediate_steps = (
             output.get("intermediate_steps", []) if isinstance(output, dict) else []
@@ -49,7 +97,12 @@ async def get_result_and_steps(langchain_object, message: str, **kwargs):
             if isinstance(output, dict)
             else output
         )
-        thought = format_actions(intermediate_steps) if intermediate_steps else ""
+        try:
+            thought = format_actions(intermediate_steps) if intermediate_steps else ""
+        except Exception as exc:
+            logger.exception(exc)
+            thought = ""
     except Exception as exc:
+        logger.exception(exc)
         raise ValueError(f"Error: {str(exc)}") from exc
     return result, thought

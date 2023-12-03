@@ -13,6 +13,16 @@ NON_CHAT_AGENTS = {
 }
 
 
+class AgentFrontendNode(FrontendNode):
+    @staticmethod
+    def format_field(field: TemplateField, name: Optional[str] = None) -> None:
+        if field.name in ["suffix", "prefix"]:
+            field.show = True
+        if field.name == "Tools" and name == "ZeroShotAgent":
+            field.field_type = "BaseTool"
+            field.is_list = True
+
+
 class SQLAgentNode(FrontendNode):
     name: str = "SQLAgent"
     template: Template = Template(
@@ -135,7 +145,7 @@ class CSVAgentNode(FrontendNode):
                 name="path",
                 value="",
                 suffixes=[".csv"],
-                fileTypes=["csv"],
+                file_types=["csv"],
             ),
             TemplateField(
                 field_type="BaseLanguageModel",
@@ -179,7 +189,7 @@ class InitializeAgentNode(FrontendNode):
             ),
             TemplateField(
                 field_type="Tool",
-                required=False,
+                required=True,
                 show=True,
                 name="tools",
                 is_list=True,
@@ -196,7 +206,7 @@ class InitializeAgentNode(FrontendNode):
         ],
     )
     description: str = """Construct a zero shot agent from an LLM and tools."""
-    base_classes: list[str] = ["AgentExecutor", "function"]
+    base_classes: list[str] = ["AgentExecutor", "Callable"]
 
     def to_dict(self):
         return super().to_dict()

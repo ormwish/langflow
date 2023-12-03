@@ -1,29 +1,28 @@
-import DisclosureComponent from "../DisclosureComponent";
+import { cloneDeep } from "lodash";
+import { useContext, useEffect, useState } from "react";
+import ShadTooltip from "../../../../components/ShadTooltipComponent";
+import IconComponent from "../../../../components/genericIconComponent";
+import { Input } from "../../../../components/ui/input";
+import { Separator } from "../../../../components/ui/separator";
+import { alertContext } from "../../../../contexts/alertContext";
+import { FlowsContext } from "../../../../contexts/flowsContext";
+import { typesContext } from "../../../../contexts/typesContext";
+import ApiModal from "../../../../modals/ApiModal";
+import ExportModal from "../../../../modals/exportModal";
+import { APIClassType, APIObjectType } from "../../../../types/api";
 import {
-  classNames,
   nodeColors,
   nodeIconsLucide,
   nodeNames,
-} from "../../../../utils";
-import { useContext, useState } from "react";
-import { typesContext } from "../../../../contexts/typesContext";
-import { APIClassType, APIObjectType } from "../../../../types/api";
-import ShadTooltip from "../../../../components/ShadTooltipComponent";
-import { Code2, FileDown, FileUp, Save, Search } from "lucide-react";
-import { PopUpContext } from "../../../../contexts/popUpContext";
-import ExportModal from "../../../../modals/exportModal";
-import ApiModal from "../../../../modals/ApiModal";
-import { TabsContext } from "../../../../contexts/tabsContext";
-import { alertContext } from "../../../../contexts/alertContext";
-import { INPUT_STYLE } from "../../../../constants";
-import { Separator } from "../../../../components/ui/separator";
-import { Menu } from "lucide-react";
+} from "../../../../utils/styleUtils";
+import { classNames } from "../../../../utils/utils";
+import DisclosureComponent from "../DisclosureComponent";
 
-export default function ExtraSidebar() {
-  const { data } = useContext(typesContext);
-  const { openPopUp } = useContext(PopUpContext);
-  const { flows, tabId, uploadFlow, tabsState, saveFlow } =
-    useContext(TabsContext);
+export default function ExtraSidebar(): JSX.Element {
+  const { data, templates, getFilterEdge, setFilterEdge } =
+    useContext(typesContext);
+  const { flows, tabId, uploadFlow, tabsState, saveFlow, isBuilt } =
+    useContext(FlowsContext);
   const { setSuccessData, setErrorData } = useContext(alertContext);
   const [dataFilter, setFilterData] = useState(data);
   const [search, setSearch] = useState("");
@@ -31,7 +30,7 @@ export default function ExtraSidebar() {
   function onDragStart(
     event: React.DragEvent<any>,
     data: { type: string; node?: APIClassType }
-  ) {
+  ): void {
     //start drag event
     var crt = event.currentTarget.cloneNode(true);
     crt.style.position = "absolute";
@@ -40,10 +39,15 @@ export default function ExtraSidebar() {
     crt.classList.add("cursor-grabbing");
     document.body.appendChild(crt);
     event.dataTransfer.setDragImage(crt, 0, 0);
-    event.dataTransfer.setData("json", JSON.stringify(data));
+    event.dataTransfer.setData("nodedata", JSON.stringify(data));
   }
 
+  // Handle showing components after use search input
   function handleSearchInput(e: string) {
+    if (e === "") {
+      setFilterData(data);
+      return;
+    }
     setFilterData((_) => {
       let ret = {};
       Object.keys(data).forEach((d: keyof APIObjectType, i) => {
@@ -58,122 +62,209 @@ export default function ExtraSidebar() {
       return ret;
     });
   }
+  const flow = flows.find((flow) => flow.id === tabId);
+  useEffect(() => {
+    // show components with error on load
+    let errors: string[] = [];
+    Object.keys(templates).forEach((component) => {
+      if (templates[component].error) {
+        errors.push(component);
+      }
+    });
+    if (errors.length > 0)
+      setErrorData({ title: " Components with errors: ", list: errors });
+  }, []);
+
+  function handleBlur() {
+    if (!search && search === "") {
+      setFilterData(data);
+      setFilterEdge([]);
+      setSearch("");
+    }
+  }
+
+  useEffect(() => {
+    if (getFilterEdge.length === 0 && search === "") {
+      setFilterData(data);
+      setFilterEdge([]);
+      setSearch("");
+    }
+  }, [getFilterEdge]);
+
+  useEffect(() => {
+    if (getFilterEdge?.length > 0) {
+      setFilterData((_) => {
+        let dataClone = cloneDeep(data);
+        let ret = {};
+        Object.keys(dataClone).forEach((d: keyof APIObjectType, i) => {
+          ret[d] = {};
+          if (getFilterEdge.some((x) => x.family === d)) {
+            ret[d] = dataClone[d];
+
+            const filtered = getFilterEdge
+              .filter((x) => x.family === d)
+              .pop()
+              .type.split(",");
+
+            for (let i = 0; i < filtered.length; i++) {
+              filtered[i] = filtered[i].trimStart();
+            }
+
+            if (filtered.some((x) => x !== "")) {
+              let keys = Object.keys(dataClone[d]).filter((nd) =>
+                filtered.includes(nd)
+              );
+              Object.keys(dataClone[d]).forEach((element) => {
+                if (!keys.includes(element)) {
+                  delete ret[d][element];
+                }
+              });
+            }
+          }
+        });
+        setSearch("");
+        return ret;
+      });
+    }
+  }, [getFilterEdge]);
 
   return (
-    <div className="w-52 flex flex-col overflow-hidden scrollbar-hide h-full border-r">
-      <div className="mt-2 mb-2 w-full flex gap-2 justify-between px-2 items-center">
-        <ShadTooltip delayDuration={1000} content="Import" side="top">
-          <button
-            className="text-foreground w-full justify-center shadow-sm transition-all duration-500 ease-in-out   relative inline-flex items-center rounded-md bg-background px-2 py-2 ring-1 ring-inset ring-input hover:bg-muted"
-            onClick={() => {
-              // openPopUp(<ImportModal />);
-              uploadFlow();
-            }}
-          >
-            <FileUp strokeWidth={1.5} className="w-5 h-5 "></FileUp>
-          </button>
-        </ShadTooltip>
-
-        <ShadTooltip delayDuration={1000} content="Export" side="top">
-          <button
-            className={classNames(
-              "text-foreground w-full justify-center shadow-sm transition-all duration-500 ease-in-out   relative inline-flex items-center bg-background px-2 py-2  ring-1 ring-inset ring-input hover:bg-muted rounded-md"
+    <div className="side-bar-arrangement">
+      <div className="side-bar-buttons-arrangement">
+        <div className="side-bar-button">
+          <ShadTooltip content="Import" side="top">
+            <button
+              className="extra-side-bar-buttons"
+              onClick={() => {
+                uploadFlow(false);
+              }}
+            >
+              <IconComponent name="FileUp" className="side-bar-button-size " />
+            </button>
+          </ShadTooltip>
+        </div>
+        <div className="side-bar-button">
+          <ExportModal>
+            <ShadTooltip content="Export" side="top">
+              <div className={classNames("extra-side-bar-buttons")}>
+                <IconComponent
+                  name="FileDown"
+                  className="side-bar-button-size"
+                />
+              </div>
+            </ShadTooltip>
+          </ExportModal>
+        </div>
+        <ShadTooltip content={"Code"} side="top">
+          <div className="side-bar-button">
+            {flow && flow.data && (
+              <ApiModal flow={flow}>
+                <button
+                  className={"w-full " + (!isBuilt ? "button-disable" : "")}
+                >
+                  <div className={classNames("extra-side-bar-buttons")}>
+                    <IconComponent
+                      name="Code2"
+                      className={
+                        "side-bar-button-size" +
+                        (isBuilt ? " " : " extra-side-bar-save-disable")
+                      }
+                    />
+                  </div>
+                </button>
+              </ApiModal>
             )}
-            onClick={(event) => {
-              openPopUp(<ExportModal />);
-            }}
-          >
-            <FileDown strokeWidth={1.5} className="w-5 h-5  "></FileDown>
-          </button>
+          </div>
         </ShadTooltip>
-        <ShadTooltip delayDuration={1000} content="Code" side="top">
-          <button
-            className={classNames(
-              "text-foreground w-full justify-center shadow-sm transition-all duration-500 ease-in-out   relative inline-flex items-center bg-background px-2 py-2  ring-1 ring-inset ring-input hover:bg-muted rounded-md"
-            )}
-            onClick={(event) => {
-              openPopUp(<ApiModal flow={flows.find((f) => f.id === tabId)} />);
-            }}
-          >
-            <Code2 strokeWidth={1.5} className="w-5 h-5  "></Code2>
-          </button>
-        </ShadTooltip>
-
-        <ShadTooltip delayDuration={1000} content="Save" side="top">
-          <button
-            className="text-foreground w-full justify-center transition-all shadow-sm duration-500 ease-in-out   relative inline-flex items-center bg-background px-2 py-2  ring-1 ring-inset ring-input hover:bg-muted rounded-md"
-            onClick={(event) => {
-              saveFlow(flows.find((f) => f.id === tabId));
-              setSuccessData({ title: "Changes saved successfully" });
-            }}
-            disabled={!isPending}
-          >
-            <Save
-              strokeWidth={1.5}
+        <div className="side-bar-button">
+          <ShadTooltip content="Save" side="top">
+            <button
               className={
-                "w-5 h-5" + (isPending ? " " : " text-muted-foreground")
+                "extra-side-bar-buttons " + (isPending ? "" : "button-disable")
               }
-            ></Save>
-          </button>
-        </ShadTooltip>
+              onClick={(event) => {
+                saveFlow(flow!);
+              }}
+            >
+              <IconComponent
+                name="Save"
+                className={
+                  "side-bar-button-size" +
+                  (isPending ? " " : " extra-side-bar-save-disable")
+                }
+              />
+            </button>
+          </ShadTooltip>
+        </div>
       </div>
       <Separator />
-      <div className="relative mt-2 flex items-center mb-2 mx-auto">
-        <input
+      <div className="side-bar-search-div-placement">
+        <Input
+          onFocusCapture={() => handleBlur()}
           type="text"
           name="search"
           id="search"
           placeholder="Search"
-          className={
-            INPUT_STYLE +
-            "w-full border-1 rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          }
-          onChange={(e) => {
-            handleSearchInput(e.target.value);
-            setSearch(e.target.value);
+          className="nopan nodelete nodrag noundo nocopy input-search"
+          onChange={(event) => {
+            handleSearchInput(event.target.value);
+            // Set search input state
+            setSearch(event.target.value);
           }}
         />
-        <div className="absolute inset-y-0 right-0 flex py-1.5 pr-3 items-center">
-          {/* ! replace hash color here */}
-          <Search size={20} strokeWidth={1.5} className="text-primary" />
+        <div className="search-icon">
+          <IconComponent
+            name="Search"
+            className={"h-5 w-5 stroke-[1.5] text-primary"}
+            aria-hidden="true"
+          />
         </div>
       </div>
 
-      <div className="w-full overflow-auto scrollbar-hide">
+      <div className="side-bar-components-div-arrangement">
         {Object.keys(dataFilter)
           .sort()
-          .map((d: keyof APIObjectType, i) =>
-            Object.keys(dataFilter[d]).length > 0 ? (
+          .map((SBSectionName: keyof APIObjectType, index) =>
+            Object.keys(dataFilter[SBSectionName]).length > 0 ? (
               <DisclosureComponent
-                openDisc={search.length == 0 ? false : true}
-                key={nodeNames[d]}
+                openDisc={
+                  getFilterEdge.length !== 0 || search.length !== 0
+                    ? true
+                    : false
+                }
+                key={index + search + JSON.stringify(getFilterEdge)}
                 button={{
-                  title: nodeNames[d] ?? nodeNames.unknown,
-                  Icon: nodeIconsLucide[d] ?? nodeIconsLucide.unknown,
+                  title: nodeNames[SBSectionName] ?? nodeNames.unknown,
+                  Icon:
+                    nodeIconsLucide[SBSectionName] ?? nodeIconsLucide.unknown,
                 }}
               >
-                <div className="p-2 flex flex-col gap-2">
-                  {Object.keys(dataFilter[d])
+                <div className="side-bar-components-gap">
+                  {Object.keys(dataFilter[SBSectionName])
                     .sort()
-                    .map((t: string, k) => (
+                    .map((SBItemName: string, index) => (
                       <ShadTooltip
-                        content={data[d][t].display_name}
-                        delayDuration={1500}
+                        content={data[SBSectionName][SBItemName].display_name}
                         side="right"
-                        key={data[d][t].display_name}
+                        key={index}
                       >
-                        <div key={k} data-tooltip-id={t}>
+                        <div key={index} data-tooltip-id={SBItemName}>
                           <div
-                            draggable
-                            className={"cursor-grab border-l-8 rounded-l-md"}
+                            draggable={!data[SBSectionName][SBItemName].error}
+                            className={
+                              "side-bar-components-border bg-background" +
+                              (data[SBSectionName][SBItemName].error
+                                ? " cursor-not-allowed select-none"
+                                : "")
+                            }
                             style={{
                               borderLeftColor:
-                                nodeColors[d] ?? nodeColors.unknown,
+                                nodeColors[SBSectionName] ?? nodeColors.unknown,
                             }}
                             onDragStart={(event) =>
                               onDragStart(event, {
-                                type: t,
-                                node: data[d][t],
+                                type: SBItemName,
+                                node: data[SBSectionName][SBItemName],
                               })
                             }
                             onDragEnd={() => {
@@ -184,11 +275,20 @@ export default function ExtraSidebar() {
                               );
                             }}
                           >
-                            <div className="flex w-full justify-between text-sm px-3 py-1 bg-white items-center border-dashed border-ring  border-l-0 rounded-md rounded-l-none border">
-                              <span className="text-foreground  w-full pr-1 truncate text-xs">
-                                {data[d][t].display_name}
+                            <div
+                              className="side-bar-components-div-form"
+                              id={
+                                "side" +
+                                data[SBSectionName][SBItemName].display_name
+                              }
+                            >
+                              <span className="side-bar-components-text">
+                                {data[SBSectionName][SBItemName].display_name}
                               </span>
-                              <Menu className="w-4 h-6  text-ring " />
+                              <IconComponent
+                                name="Menu"
+                                className="side-bar-components-icon "
+                              />
                             </div>
                           </div>
                         </div>
@@ -197,7 +297,7 @@ export default function ExtraSidebar() {
                 </div>
               </DisclosureComponent>
             ) : (
-              <div key={i}></div>
+              <div key={index}></div>
             )
           )}
       </div>

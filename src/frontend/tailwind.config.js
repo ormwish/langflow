@@ -12,6 +12,12 @@ module.exports = {
     "./index.html",
     "./src/**/*.{js,ts,tsx,jsx}",
   ],
+  safelist: [
+    "bg-status-blue",
+    "bg-status-green",
+    "bg-status-red",
+    "bg-status-yellow",
+  ],
   important: true,
   theme: {
     container: {
@@ -23,6 +29,9 @@ module.exports = {
     },
     extend: {
       colors: {
+        "low-indigo": "var(--low-indigo)",
+        "chat-send": "var(--chat-send)",
+        connection: "var(--connection)",
         "almost-dark-gray": "var(--almost-dark-gray)",
         "almost-light-blue": "var(--almost-light-blue)",
         "almost-medium-blue": "var(--almost-medium-blue)",
@@ -32,6 +41,7 @@ module.exports = {
         "btn-shadow": "var(--round-btn-shadow)",
         "build-trigger": "var(--build-trigger)",
         "chat-trigger": "var(--chat-trigger)",
+        "chat-trigger-disabled": "var(--chat-trigger-disabled)",
         "blur-shared": "var(--blur-shared)",
         "dark-blue": "var(--dark-blue)",
         "dark-gray": "var(--dark-gray)",
@@ -61,6 +71,10 @@ module.exports = {
         "status-yellow": "var(--status-yellow)",
         "success-background": "var(--success-background)",
         "success-foreground": "var(--success-foreground)",
+        "beta-background": "var(--beta-background)",
+        "beta-foreground": "var(--beta-foreground)",
+        "chat-bot-icon": "var(--chat-bot-icon)",
+        "chat-user-icon": "var(--chat-user-icon)",
 
         white: "var(--white)",
         border: "hsl(var(--border))",
@@ -105,20 +119,6 @@ module.exports = {
       fontFamily: {
         sans: ["var(--font-sans)", ...fontFamily.sans],
       },
-      keyframes: {
-        "accordion-down": {
-          from: { height: 0 },
-          to: { height: "var(--radix-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: 0 },
-        },
-      },
-      animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-      },
     },
   },
 
@@ -155,7 +155,9 @@ module.exports = {
           overflow: "hidden",
           "text-overflow": "ellipsis",
         },
-
+        ".word-break-break-word": {
+          wordBreak: "break-word",
+        },
         ".arrow-hide": {
           "&::-webkit-inner-spin-button": {
             "-webkit-appearance": "none",
@@ -178,6 +180,7 @@ module.exports = {
         ".custom-scroll": {
           "&::-webkit-scrollbar": {
             width: "8px",
+            height: "8px",
           },
           "&::-webkit-scrollbar-track": {
             backgroundColor: "#f1f1f1",
@@ -189,6 +192,7 @@ module.exports = {
           "&::-webkit-scrollbar-thumb:hover": {
             backgroundColor: "#bbb",
           },
+          cursor: "auto",
         },
         ".dark .theme-attribution .react-flow__attribution": {
           backgroundColor: "rgba(255, 255, 255, 0.2)",
@@ -196,6 +200,12 @@ module.exports = {
         },
         ".dark .theme-attribution .react-flow__attribution a": {
           color: "black",
+        },
+        ".text-align-last-left": {
+          "text-align-last": "left",
+        },
+        ".text-align-last-right": {
+          "text-align-last": "right",
         },
       });
     }),

@@ -1,3 +1,4 @@
+import { cloneDeep } from "lodash";
 import {
   createContext,
   useCallback,
@@ -5,33 +6,14 @@ import {
   useEffect,
   useState,
 } from "react";
-import { Edge, Node, useReactFlow } from "reactflow";
-import { cloneDeep } from "lodash";
-import { TabsContext } from "./tabsContext";
-
-type undoRedoContextType = {
-  undo: () => void;
-  redo: () => void;
-  takeSnapshot: () => void;
-};
-
-type UseUndoRedoOptions = {
-  maxHistorySize: number;
-  enableShortcuts: boolean;
-};
-
-type UseUndoRedo = (options?: UseUndoRedoOptions) => {
-  undo: () => void;
-  redo: () => void;
-  takeSnapshot: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
-};
-
-type HistoryItem = {
-  nodes: Node[];
-  edges: Edge[];
-};
+import { useReactFlow } from "reactflow";
+import {
+  HistoryItem,
+  UseUndoRedoOptions,
+  undoRedoContextType,
+} from "../types/typesContext";
+import { isWrappedWithClass } from "../utils/utils";
+import { FlowsContext } from "./flowsContext";
 
 const initialValue = {
   undo: () => {},
@@ -47,19 +29,23 @@ const defaultOptions: UseUndoRedoOptions = {
 export const undoRedoContext = createContext<undoRedoContextType>(initialValue);
 
 export function UndoRedoProvider({ children }) {
-  const { tabId, flows } = useContext(TabsContext);
+  const { tabId, flows } = useContext(FlowsContext);
 
   const [past, setPast] = useState<HistoryItem[][]>(flows.map(() => []));
   const [future, setFuture] = useState<HistoryItem[][]>(flows.map(() => []));
   const [tabIndex, setTabIndex] = useState(
-    flows.findIndex((f) => f.id === tabId)
+    flows.findIndex((flow) => flow.id === tabId)
   );
 
   useEffect(() => {
     // whenever the flows variable changes, we need to add one array to the past and future states
-    setPast((old) => flows.map((f, i) => (old[i] ? old[i] : [])));
-    setFuture((old) => flows.map((f, i) => (old[i] ? old[i] : [])));
-    setTabIndex(flows.findIndex((f) => f.id === tabId));
+    setPast((old) =>
+      flows.map((flow, index) => (old[index] ? old[index] : []))
+    );
+    setFuture((old) =>
+      flows.map((flow, index) => (old[index] ? old[index] : []))
+    );
+    setTabIndex(flows.findIndex((flow) => flow.id === tabId));
   }, [flows, tabId]);
 
   const { setNodes, setEdges, getNodes, getEdges } = useReactFlow();
@@ -156,17 +142,21 @@ export function UndoRedoProvider({ children }) {
     }
 
     const keyDownHandler = (event: KeyboardEvent) => {
-      if (
-        event.key === "z" &&
-        (event.ctrlKey || event.metaKey) &&
-        event.shiftKey
-      ) {
-        redo();
-      } else if (event.key === "y" && (event.ctrlKey || event.metaKey)) {
-        event.preventDefault(); // prevent the default action
-        redo();
-      } else if (event.key === "z" && (event.ctrlKey || event.metaKey)) {
-        undo();
+      if (!isWrappedWithClass(event, "noundo")) {
+        if (
+          event.key === "z" &&
+          (event.ctrlKey || event.metaKey) &&
+          event.shiftKey
+        ) {
+          event.preventDefault();
+          redo();
+        } else if (event.key === "y" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault(); // prevent the default action
+          redo();
+        } else if (event.key === "z" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          undo();
+        }
       }
     };
 

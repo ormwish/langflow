@@ -5,6 +5,8 @@ all: help
 init:
 	@echo 'Installing pre-commit hooks'
 	git config core.hooksPath .githooks
+	@echo 'Making pre-commit hook executable'
+	chmod +x .githooks/pre-commit
 	@echo 'Installing backend dependencies'
 	make install_backend
 	@echo 'Installing frontend dependencies'
@@ -17,7 +19,15 @@ coverage:
 		--cov-report term-missing:skip-covered
 
 tests:
+	@make install_backend
 	poetry run pytest tests
+
+tests_frontend:
+ifeq ($(UI), true)
+		cd src/frontend && ./run-tests.sh --ui
+else
+		cd src/frontend && ./run-tests.sh
+endif
 
 format:
 	poetry run black .
@@ -25,31 +35,56 @@ format:
 	cd src/frontend && npm run format
 
 lint:
-	poetry run mypy .
+	poetry run mypy src/backend/langflow
 	poetry run black . --check
 	poetry run ruff . --fix
 
 install_frontend:
 	cd src/frontend && npm install
 
+install_frontendc:
+	cd src/frontend && rm -rf node_modules package-lock.json && npm install
+
 run_frontend:
 	cd src/frontend && npm start
 
+run_cli:
+	poetry run langflow --path src/frontend/build
+
+run_cli_debug:
+	poetry run langflow --path src/frontend/build --log-level debug
+
+setup_devcontainer:
+	make init
+	make build_frontend
+	@echo 'Run Cli'
+	make run_cli
+
 frontend:
-	make install_frontend
+	@-make install_frontend || (echo "An error occurred while installing frontend dependencies. Attempting to fix." && make install_frontendc)
+	@make run_frontend
+
+frontendc:
+	make install_frontendc
 	make run_frontend
 
 install_backend:
-	poetry install
+	poetry install --extras deploy
 
 backend:
 	make install_backend
-	poetry run uvicorn src.backend.langflow.main:app --port 7860 --reload --log-level debug
+ifeq ($(login),1)
+	@echo "Running backend without autologin";
+	poetry run langflow run --backend-only --port 7860 --host 0.0.0.0 --no-open-browser --log-level debug --workers 3
+else
+	@echo "Running backend with autologin";
+	LANGFLOW_AUTO_LOGIN=True poetry run langflow run --backend-only --port 7860 --host 0.0.0.0 --no-open-browser --log-level debug --workers 3
+endif
 
 build_and_run:
 	echo 'Removing dist folder'
 	rm -rf dist
-	make build && poetry run pip install dist/*.tar.gz && poetry run langflow
+	make build && poetry run pip install dist/*.tar.gz && poetry run langflow run
 
 build_and_install:
 	echo 'Removing dist folder'
@@ -65,17 +100,6 @@ build:
 	make build_frontend
 	poetry build --format sdist
 	rm -rf src/backend/langflow/frontend
-
-lcserve_push:
-	make build_frontend
-	@version=$$(poetry version --short); \
-	lc-serve push --app langflow.lcserve:app --app-dir . \
-		--image-name langflow --image-tag $${version} --verbose --public
-
-lcserve_deploy:
-	@:$(if $(uses),,$(error `uses` is not set. Please run `make uses=... lcserve_deploy`))
-	lc-serve deploy jcloud --app langflow.lcserve:app --app-dir . \
-		--uses $(uses) --config src/backend/langflow/jcloud.yml --verbose
 
 dev:
 	make install_frontend

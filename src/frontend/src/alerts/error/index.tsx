@@ -1,14 +1,14 @@
 import { Transition } from "@headlessui/react";
 import { useEffect, useState } from "react";
+import IconComponent from "../../components/genericIconComponent";
 import { ErrorAlertType } from "../../types/alerts";
-import { XCircle } from "lucide-react";
 
 export default function ErrorAlert({
   title,
   list = [],
   id,
   removeAlert,
-}: ErrorAlertType) {
+}: ErrorAlertType): JSX.Element {
   const [show, setShow] = useState(true);
   useEffect(() => {
     if (show) {
@@ -20,6 +20,7 @@ export default function ErrorAlert({
       }, 5000);
     }
   }, [id, removeAlert, show]);
+
   return (
     <Transition
       className="relative"
@@ -39,19 +40,22 @@ export default function ErrorAlert({
             removeAlert(id);
           }, 500);
         }}
-        className="rounded-md w-96 mt-6 shadow-xl bg-error-background  p-4 cursor-pointer"
+        className="error-build-message"
       >
         <div className="flex">
           <div className="flex-shrink-0">
-            <XCircle className="h-5 w-5 text-status-red" aria-hidden="true" />
+            <IconComponent
+              name="XCircle"
+              className="error-build-message-circle"
+              aria-hidden="true"
+            />
           </div>
           <div className="ml-3">
-            <h3 className="text-sm font-medium text-error-foreground">
-              {title}
-            </h3>
-            {list.length !== 0 ? (
-              <div className="mt-2 text-sm text-error-foreground">
-                <ul className="list-disc space-y-1 pl-5">
+            <h3 className="error-build-foreground">{title}</h3>
+            {list?.length !== 0 &&
+            list?.some((item) => item !== null && item !== undefined) ? (
+              <div className="error-build-message-div">
+                <ul className="error-build-message-list">
                   {list.map((item, index) => (
                     <li key={index}>{item}</li>
                   ))}

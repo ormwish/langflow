@@ -1,13 +1,18 @@
-import importlib
-import inspect
 import re
+import inspect
+import importlib
 from functools import wraps
-from typing import Dict, Optional
+from typing import List, Optional, Dict, Any, Union
 
-from docstring_parser import parse  # type: ignore
+from docstring_parser import parse
 
 from langflow.template.frontend_node.constants import FORCE_SHOW_FIELDS
 from langflow.utils import constants
+from langchain.schema import Document
+
+
+def remove_ansi_escape_codes(text):
+    return re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", text)
 
 
 def build_template_from_function(
@@ -29,7 +34,7 @@ def build_template_from_function(
             docs = parse(_class.__doc__)
 
             variables = {"_type": _type}
-            for class_field_items, value in _class.__fields__.items():
+            for class_field_items, value in _class.model_fields.items():
                 if class_field_items in ["callback_manager"]:
                     continue
                 variables[class_field_items] = {}
@@ -55,7 +60,7 @@ def build_template_from_function(
             # the output to be a function
             base_classes = get_base_classes(_class)
             if add_function:
-                base_classes.append("function")
+                base_classes.append("Callable")
 
             return {
                 "template": format_dict(variables, name),
@@ -109,7 +114,7 @@ def build_template_from_class(
             # Adding function to base classes to allow
             # the output to be a function
             if add_function:
-                base_classes.append("function")
+                base_classes.append("Callable")
             return {
                 "template": format_dict(variables, name),
                 "description": docs.short_description or "",
@@ -165,6 +170,7 @@ def build_template_from_method(
                         "required": param.default == param.empty,
                     }
                     for name, param in params.items()
+                    if name not in ["self", "kwargs", "args"]
                 },
             }
 
@@ -172,7 +178,7 @@ def build_template_from_method(
 
             # Adding function to base classes to allow the output to be a function
             if add_function:
-                base_classes.append("function")
+                base_classes.append("Callable")
 
             return {
                 "template": format_dict(variables, class_name),
@@ -185,7 +191,9 @@ def get_base_classes(cls):
     """Get the base classes of a class.
     These are used to determine the output of the nodes.
     """
-    if bases := cls.__bases__:
+
+    if hasattr(cls, "__bases__") and cls.__bases__:
+        bases = cls.__bases__
         result = []
         for base in bases:
             if any(type in base.__module__ for type in ["pydantic", "abc"]):
@@ -211,104 +219,6 @@ def get_default_factory(module: str, function: str):
         imported_module = importlib.import_module(module)
         return getattr(imported_module, match[1])()
     return None
-
-
-def format_dict(d, name: Optional[str] = None):
-    """
-    Formats a dictionary by removing certain keys and modifying the
-    values of other keys.
-
-    Args:
-        d: the dictionary to format
-        name: the name of the class to format
-
-    Returns:
-        A new dictionary with the desired modifications applied.
-    """
-
-    # Process remaining keys
-    for key, value in d.items():
-        if key == "_type":
-            continue
-
-        _type = value["type"]
-
-        # Remove 'Optional' wrapper
-        if "Optional" in _type:
-            _type = _type.replace("Optional[", "")[:-1]
-
-        # Check for list type
-        if "List" in _type or "Sequence" in _type or "Set" in _type:
-            _type = _type.replace("List[", "")[:-1]
-            value["list"] = True
-        else:
-            value["list"] = False
-
-        # Replace 'Mapping' with 'dict'
-        if "Mapping" in _type:
-            _type = _type.replace("Mapping", "dict")
-
-        # Change type from str to Tool
-        value["type"] = "Tool" if key in ["allowed_tools"] else _type
-
-        value["type"] = "int" if key in ["max_value_length"] else value["type"]
-
-        # Show or not field
-        value["show"] = bool(
-            (value["required"] and key not in ["input_variables"])
-            or key in FORCE_SHOW_FIELDS
-            or "api_key" in key
-        )
-
-        # Add password field
-        value["password"] = any(
-            text in key.lower() for text in ["password", "token", "api", "key"]
-        )
-
-        # Add multline
-        value["multiline"] = key in [
-            "suffix",
-            "prefix",
-            "template",
-            "examples",
-            "code",
-            "headers",
-            "format_instructions",
-        ]
-
-        # Replace dict type with str
-        if "dict" in value["type"].lower():
-            value["type"] = "code"
-
-        if key == "dict_":
-            value["type"] = "file"
-            value["suffixes"] = [".json", ".yaml", ".yml"]
-            value["fileTypes"] = ["json", "yaml", "yml"]
-
-        # Replace default value with actual value
-        if "default" in value:
-            value["value"] = value["default"]
-            value.pop("default")
-
-        if key == "headers":
-            value[
-                "value"
-            ] = """{'Authorization':
-            'Bearer <token>'}"""
-        # Add options to openai
-        if name == "OpenAI" and key == "model_name":
-            value["options"] = constants.OPENAI_MODELS
-            value["list"] = True
-            value["value"] = constants.OPENAI_MODELS[0]
-        elif name == "ChatOpenAI" and key == "model_name":
-            value["options"] = constants.CHAT_OPENAI_MODELS
-            value["list"] = True
-            value["value"] = constants.CHAT_OPENAI_MODELS[0]
-        elif (name == "Anthropic" or name == "ChatAnthropic") and key == "model_name":
-            value["options"] = constants.ANTHROPIC_MODELS
-            value["list"] = True
-            value["value"] = constants.ANTHROPIC_MODELS[0]
-    return d
 
 
 def update_verbose(d: dict, new_value: bool) -> dict:
@@ -341,3 +251,225 @@ def sync_to_async(func):
         return func(*args, **kwargs)
 
     return async_wrapper
+
+
+def format_dict(
+    dictionary: Dict[str, Any], class_name: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Formats a dictionary by removing certain keys and modifying the
+    values of other keys.
+
+    Returns:
+        A new dictionary with the desired modifications applied.
+    """
+
+    for key, value in dictionary.items():
+        if key == "_type":
+            continue
+
+        _type: Union[str, type] = get_type(value)
+
+        if "BaseModel" in str(_type):
+            continue
+
+        _type = remove_optional_wrapper(_type)
+        _type = check_list_type(_type, value)
+        _type = replace_mapping_with_dict(_type)
+        _type = get_type_from_union_literal(_type)
+
+        value["type"] = get_formatted_type(key, _type)
+        value["show"] = should_show_field(value, key)
+        value["password"] = is_password_field(key)
+        value["multiline"] = is_multiline_field(key)
+
+        if key == "dict_":
+            set_dict_file_attributes(value)
+
+        replace_default_value_with_actual(value)
+
+        if key == "headers":
+            set_headers_value(value)
+
+        add_options_to_field(value, class_name, key)
+
+    return dictionary
+
+
+# "Union[Literal['f-string'], Literal['jinja2']]" -> "str"
+def get_type_from_union_literal(union_literal: str) -> str:
+    # if types are literal strings
+    # the type is a string
+    if "Literal" in union_literal:
+        return "str"
+    return union_literal
+
+
+def get_type(value: Any) -> Union[str, type]:
+    """
+    Retrieves the type value from the dictionary.
+
+    Returns:
+        The type value.
+    """
+    # get "type" or "annotation" from the value
+    _type = value.get("type") or value.get("annotation")
+
+    return _type if isinstance(_type, str) else _type.__name__
+
+
+def remove_optional_wrapper(_type: Union[str, type]) -> str:
+    """
+    Removes the 'Optional' wrapper from the type string.
+
+    Returns:
+        The type string with the 'Optional' wrapper removed.
+    """
+    if isinstance(_type, type):
+        _type = str(_type)
+    if "Optional" in _type:
+        _type = _type.replace("Optional[", "")[:-1]
+
+    return _type
+
+
+def check_list_type(_type: str, value: Dict[str, Any]) -> str:
+    """
+    Checks if the type is a list type and modifies the value accordingly.
+
+    Returns:
+        The modified type string.
+    """
+    if any(list_type in _type for list_type in ["List", "Sequence", "Set"]):
+        _type = (
+            _type.replace("List[", "").replace("Sequence[", "").replace("Set[", "")[:-1]
+        )
+        value["list"] = True
+    else:
+        value["list"] = False
+
+    return _type
+
+
+def replace_mapping_with_dict(_type: str) -> str:
+    """
+    Replaces 'Mapping' with 'dict' in the type string.
+
+    Returns:
+        The modified type string.
+    """
+    if "Mapping" in _type:
+        _type = _type.replace("Mapping", "dict")
+
+    return _type
+
+
+def get_formatted_type(key: str, _type: str) -> str:
+    """
+    Formats the type value based on the given key.
+
+    Returns:
+        The formatted type value.
+    """
+    if key == "allowed_tools":
+        return "Tool"
+
+    elif key == "max_value_length":
+        return "int"
+
+    return _type
+
+
+def should_show_field(value: Dict[str, Any], key: str) -> bool:
+    """
+    Determines if the field should be shown or not.
+
+    Returns:
+        True if the field should be shown, False otherwise.
+    """
+    return (
+        (value["required"] and key != "input_variables")
+        or key in FORCE_SHOW_FIELDS
+        or any(text in key.lower() for text in ["password", "token", "api", "key"])
+    )
+
+
+def is_password_field(key: str) -> bool:
+    """
+    Determines if the field is a password field.
+
+    Returns:
+        True if the field is a password field, False otherwise.
+    """
+    return any(text in key.lower() for text in ["password", "token", "api", "key"])
+
+
+def is_multiline_field(key: str) -> bool:
+    """
+    Determines if the field is a multiline field.
+
+    Returns:
+        True if the field is a multiline field, False otherwise.
+    """
+    return key in {
+        "suffix",
+        "prefix",
+        "template",
+        "examples",
+        "code",
+        "headers",
+        "format_instructions",
+    }
+
+
+def set_dict_file_attributes(value: Dict[str, Any]) -> None:
+    """
+    Sets the file attributes for the 'dict_' key.
+    """
+    value["type"] = "file"
+    value["suffixes"] = [".json", ".yaml", ".yml"]
+    value["fileTypes"] = ["json", "yaml", "yml"]
+
+
+def replace_default_value_with_actual(value: Dict[str, Any]) -> None:
+    """
+    Replaces the default value with the actual value.
+    """
+    if "default" in value:
+        value["value"] = value["default"]
+        value.pop("default")
+
+
+def set_headers_value(value: Dict[str, Any]) -> None:
+    """
+    Sets the value for the 'headers' key.
+    """
+    value["value"] = """{"Authorization": "Bearer <token>"}"""
+
+
+def add_options_to_field(
+    value: Dict[str, Any], class_name: Optional[str], key: str
+) -> None:
+    """
+    Adds options to the field based on the class name and key.
+    """
+    options_map = {
+        "OpenAI": constants.OPENAI_MODELS,
+        "ChatOpenAI": constants.CHAT_OPENAI_MODELS,
+        "Anthropic": constants.ANTHROPIC_MODELS,
+        "ChatAnthropic": constants.ANTHROPIC_MODELS,
+    }
+
+    if class_name in options_map and key == "model_name":
+        value["options"] = options_map[class_name]
+        value["list"] = True
+        value["value"] = options_map[class_name][0]
+
+
+def build_loader_repr_from_documents(documents: List[Document]) -> str:
+    if documents:
+        avg_length = sum(len(doc.page_content) for doc in documents) / len(documents)
+        return f"""{len(documents)} documents
+        \nAvg. Document Length (characters): {int(avg_length)}
+        Documents: {documents[:3]}..."""
+    return "0 documents"

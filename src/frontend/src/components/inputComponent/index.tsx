@@ -1,74 +1,106 @@
-import { useContext, useEffect, useState } from "react";
+import * as Form from "@radix-ui/react-form";
+import { useEffect, useRef, useState } from "react";
 import { InputComponentType } from "../../types/components";
-import { classNames } from "../../utils";
-import { TabsContext } from "../../contexts/tabsContext";
-import { PopUpContext } from "../../contexts/popUpContext";
-import { INPUT_STYLE } from "../../constants";
+import { handleKeyDown } from "../../utils/reactflowUtils";
+import { classNames } from "../../utils/utils";
+import { Input } from "../ui/input";
 
 export default function InputComponent({
+  autoFocus = false,
+  onBlur,
   value,
   onChange,
-  disableCopyPaste = false,
   disabled,
+  required = false,
+  isForm = false,
   password,
   editNode = false,
-}: InputComponentType) {
-  const [myValue, setMyValue] = useState(value ?? "");
+  placeholder = "Type something...",
+  className,
+  id = "",
+  blurOnEnter = false,
+}: InputComponentType): JSX.Element {
   const [pwdVisible, setPwdVisible] = useState(false);
-  const { setDisableCopyPaste } = useContext(TabsContext);
-  const { closePopUp } = useContext(PopUpContext);
-
+  const refInput = useRef<HTMLInputElement>(null);
+  // Clear component state
   useEffect(() => {
     if (disabled) {
-      setMyValue("");
       onChange("");
     }
   }, [disabled, onChange]);
 
-  useEffect(() => {
-    setMyValue(value ?? "");
-  }, [closePopUp]);
-
   return (
-    <div
-      className={
-        disabled
-          ? "relative pointer-events-none cursor-not-allowed"
-          : "relative"
-      }
-    >
-      <input
-        value={myValue}
-        onFocus={() => {
-          if (disableCopyPaste) setDisableCopyPaste(true);
-        }}
-        onBlur={() => {
-          if (disableCopyPaste) setDisableCopyPaste(false);
-        }}
-        className={classNames(
-          "block w-full pr-12 form-input rounded-md bg-background border-ring shadow-sm sm:text-sm focus:placeholder-transparent placeholder:text-muted-foreground",
-          disabled ? " bg-input" : "",
-          password && !pwdVisible && myValue !== "" ? "password" : "",
-          editNode
-            ? "border-1 block w-full pt-0.5 pb-0.5 form-input rounded-md border-ring shadow-sm sm:text-sm text-center" +
-                INPUT_STYLE
-            : "ring-offset-input" + INPUT_STYLE,
-          password && editNode ? "pr-8" : "pr-3"
-        )}
-        placeholder={password && editNode ? "Key" : "Type something..."}
-        onChange={(e) => {
-          setMyValue(e.target.value);
-          onChange(e.target.value);
-        }}
-      />
+    <div className="relative w-full">
+      {isForm ? (
+        <Form.Control asChild>
+          <Input
+            id={"form-" + id}
+            ref={refInput}
+            onBlur={onBlur}
+            autoFocus={autoFocus}
+            type={password && !pwdVisible ? "password" : "text"}
+            value={value}
+            disabled={disabled}
+            required={required}
+            className={classNames(
+              password && !pwdVisible && value !== ""
+                ? " text-clip password "
+                : "",
+              editNode ? " input-edit-node " : "",
+              password && editNode ? "pr-8" : "",
+              password && !editNode ? "pr-10" : "",
+              className!
+            )}
+            placeholder={password && editNode ? "Key" : placeholder}
+            onChange={(e) => {
+              onChange(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              handleKeyDown(e, value, "");
+              if (blurOnEnter && e.key === "Enter") refInput.current?.blur();
+            }}
+          />
+        </Form.Control>
+      ) : (
+        <Input
+          id={id}
+          ref={refInput}
+          type="text"
+          onBlur={onBlur}
+          value={value}
+          autoFocus={autoFocus}
+          disabled={disabled}
+          required={required}
+          className={classNames(
+            password && !pwdVisible && value !== ""
+              ? " text-clip password "
+              : "",
+            editNode ? " input-edit-node " : "",
+            password && editNode ? "pr-8" : "",
+            password && !editNode ? "pr-10" : "",
+            className!
+          )}
+          placeholder={password && editNode ? "Key" : placeholder}
+          onChange={(e) => {
+            onChange(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            handleKeyDown(e, value, "");
+            if (blurOnEnter && e.key === "Enter") refInput.current?.blur();
+          }}
+        />
+      )}
       {password && (
         <button
+          type="button"
+          tabIndex={-1}
           className={classNames(
             editNode
-              ? "absolute inset-y-0 right-0 pr-2 items-center text-muted-foreground"
-              : "absolute inset-y-0 right-0 items-center px-4 text-muted-foreground"
+              ? "input-component-true-button"
+              : "input-component-false-button"
           )}
-          onClick={() => {
+          onClick={(event) => {
+            event.preventDefault();
             setPwdVisible(!pwdVisible);
           }}
         >
@@ -82,8 +114,8 @@ export default function InputComponent({
                 stroke="currentColor"
                 className={classNames(
                   editNode
-                    ? "w-5 h-5 absolute bottom-0.5 right-2"
-                    : "w-5 h-5 absolute bottom-2 right-3"
+                    ? "input-component-true-svg"
+                    : "input-component-false-svg"
                 )}
               >
                 <path
@@ -101,8 +133,8 @@ export default function InputComponent({
                 stroke="currentColor"
                 className={classNames(
                   editNode
-                    ? "w-5 h-5 absolute bottom-0.5 right-2"
-                    : "w-5 h-5 absolute bottom-2 right-3"
+                    ? "input-component-true-svg"
+                    : "input-component-false-svg"
                 )}
               >
                 <path

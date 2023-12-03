@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { ToggleComponentType } from "../../types/components";
 import { Switch } from "../ui/switch";
 
@@ -7,12 +6,8 @@ export default function ToggleShadComponent({
   setEnabled,
   disabled,
   size,
-}: ToggleComponentType) {
-  useEffect(() => {
-    if (disabled) {
-      setEnabled(false);
-    }
-  }, [disabled, setEnabled]);
+  id = "",
+}: ToggleComponentType): JSX.Element {
   let scaleX, scaleY;
   switch (size) {
     case "small":
@@ -31,16 +26,19 @@ export default function ToggleShadComponent({
       scaleX = 1;
       scaleY = 1;
   }
+
   return (
-    <div className={disabled ? "pointer-events-none cursor-not-allowed" : ""}>
+    <div className={disabled ? "pointer-events-none cursor-not-allowed " : ""}>
       <Switch
+        id={id}
         style={{
           transform: `scaleX(${scaleX}) scaleY(${scaleY})`,
         }}
+        disabled={disabled}
         className=""
         checked={enabled}
-        onCheckedChange={(x: boolean) => {
-          setEnabled(x);
+        onCheckedChange={(isEnabled: boolean) => {
+          setEnabled(isEnabled);
         }}
       ></Switch>
     </div>

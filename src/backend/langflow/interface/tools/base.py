@@ -15,11 +15,13 @@ from langflow.interface.tools.constants import (
     OTHER_TOOLS,
 )
 from langflow.interface.tools.util import get_tool_params
-from langflow.settings import settings
+from langflow.services.getters import get_settings_service
+
 from langflow.template.field.base import TemplateField
 from langflow.template.template.base import Template
 from langflow.utils import util
 from langflow.utils.util import build_template_from_class
+from langflow.utils.logger import logger
 
 TOOL_INPUTS = {
     "str": TemplateField(
@@ -34,7 +36,7 @@ TOOL_INPUTS = {
         field_type="BaseLanguageModel", required=True, is_list=False, show=True
     ),
     "func": TemplateField(
-        field_type="function",
+        field_type="Callable",
         required=True,
         is_list=False,
         show=True,
@@ -55,7 +57,7 @@ TOOL_INPUTS = {
         show=True,
         value="",
         suffixes=[".json", ".yaml", ".yml"],
-        fileTypes=["json", "yaml", "yml"],
+        file_types=["json", "yaml", "yml"],
     ),
 }
 
@@ -66,15 +68,23 @@ class ToolCreator(LangChainTypeCreator):
 
     @property
     def type_to_loader_dict(self) -> Dict:
+        settings_service = get_settings_service()
         if self.tools_dict is None:
             all_tools = {}
 
             for tool, tool_fcn in ALL_TOOLS_NAMES.items():
-                tool_params = get_tool_params(tool_fcn)
+                try:
+                    tool_params = get_tool_params(tool_fcn)
+                except Exception:
+                    logger.error(f"Error getting params for tool {tool}")
+                    continue
 
                 tool_name = tool_params.get("name") or tool
 
-                if tool_name in settings.tools or settings.dev:
+                if (
+                    tool_name in settings_service.settings.TOOLS
+                    or settings_service.settings.DEV
+                ):
                     if tool_name == "JsonSpec":
                         tool_params["path"] = tool_params.pop("dict_")  # type: ignore
                     all_tools[tool_name] = {
@@ -90,7 +100,7 @@ class ToolCreator(LangChainTypeCreator):
     def get_signature(self, name: str) -> Optional[Dict]:
         """Get the signature of a tool."""
 
-        base_classes = ["Tool"]
+        base_classes = ["Tool", "BaseTool"]
         fields = []
         params = []
         tool_params = {}
@@ -116,7 +126,7 @@ class ToolCreator(LangChainTypeCreator):
         elif tool_type in CUSTOM_TOOLS:
             # Get custom tool params
             params = self.type_to_loader_dict[name]["params"]  # type: ignore
-            base_classes = ["function"]
+            base_classes = ["Callable"]
             if node := customs.get_custom_nodes("tools").get(tool_type):
                 return node
         elif tool_type in FILE_TOOLS:
@@ -126,10 +136,15 @@ class ToolCreator(LangChainTypeCreator):
             tool_dict = build_template_from_class(tool_type, OTHER_TOOLS)
             fields = tool_dict["template"]
 
+            # _type is the only key in fields
+            # return None
+            if len(fields) == 1 and "_type" in fields:
+                return None
+
             # Pop unnecessary fields and add name
             fields.pop("_type")  # type: ignore
-            fields.pop("return_direct")  # type: ignore
-            fields.pop("verbose")  # type: ignore
+            fields.pop("return_direct", None)  # type: ignore
+            fields.pop("verbose", None)  # type: ignore
 
             tool_params = {
                 "name": fields.pop("name")["value"],  # type: ignore

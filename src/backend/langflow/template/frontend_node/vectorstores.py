@@ -4,13 +4,59 @@ from langflow.template.field.base import TemplateField
 from langflow.template.frontend_node.base import FrontendNode
 
 
+BASIC_FIELDS = [
+    "work_dir",
+    "collection_name",
+    "api_key",
+    "location",
+    "persist_directory",
+    "persist",
+    "weaviate_url",
+    "index_name",
+    "namespace",
+    "folder_path",
+    "table_name",
+    "query_name",
+    "supabase_url",
+    "supabase_service_key",
+    "mongodb_atlas_cluster_uri",
+    "collection_name",
+    "db_name",
+]
+ADVANCED_FIELDS = [
+    "n_dim",
+    "key",
+    "prefix",
+    "distance_func",
+    "content_payload_key",
+    "metadata_payload_key",
+    "timeout",
+    "host",
+    "path",
+    "url",
+    "port",
+    "https",
+    "prefer_grpc",
+    "grpc_port",
+    "pinecone_api_key",
+    "pinecone_env",
+    "client_kwargs",
+    "search_kwargs",
+    "chroma_server_host",
+    "chroma_server_http_port",
+    "chroma_server_ssl_enabled",
+    "chroma_server_grpc_port",
+    "chroma_server_cors_allow_origins",
+]
+
+
 class VectorStoreFrontendNode(FrontendNode):
     def add_extra_fields(self) -> None:
         extra_fields: List[TemplateField] = []
         # Add search_kwargs field
         extra_field = TemplateField(
             name="search_kwargs",
-            field_type="code",
+            field_type="NestedDict",
             required=False,
             placeholder="",
             show=True,
@@ -45,16 +91,62 @@ class VectorStoreFrontendNode(FrontendNode):
 
         elif self.template.type_name == "Chroma":
             # New bool field for persist parameter
-            extra_field = TemplateField(
-                name="persist",
-                field_type="bool",
-                required=False,
-                show=True,
-                advanced=False,
-                value=True,
-                display_name="Persist",
-            )
-            extra_fields.append(extra_field)
+            chroma_fields = [
+                TemplateField(
+                    name="persist",
+                    field_type="bool",
+                    required=False,
+                    show=True,
+                    advanced=False,
+                    value=False,
+                    display_name="Persist",
+                ),
+                # chroma_server_grpc_port: str | None = None,
+                TemplateField(
+                    name="chroma_server_host",
+                    field_type="str",
+                    required=False,
+                    show=True,
+                    advanced=True,
+                    display_name="Chroma Server Host",
+                ),
+                TemplateField(
+                    name="chroma_server_http_port",
+                    field_type="str",
+                    required=False,
+                    show=True,
+                    advanced=True,
+                    display_name="Chroma Server HTTP Port",
+                ),
+                TemplateField(
+                    name="chroma_server_ssl_enabled",
+                    field_type="bool",
+                    required=False,
+                    show=True,
+                    advanced=True,
+                    value=False,
+                    display_name="Chroma Server SSL Enabled",
+                ),
+                TemplateField(
+                    name="chroma_server_grpc_port",
+                    field_type="str",
+                    required=False,
+                    show=True,
+                    advanced=True,
+                    display_name="Chroma Server GRPC Port",
+                ),
+                TemplateField(
+                    name="chroma_server_cors_allow_origins",
+                    field_type="str",
+                    required=False,
+                    is_list=True,
+                    show=True,
+                    advanced=True,
+                    display_name="Chroma Server CORS Allow Origins",
+                ),
+            ]
+
+            extra_fields.extend(chroma_fields)
         elif self.template.type_name == "Pinecone":
             # add pinecone_api_key and pinecone_env
             extra_field = TemplateField(
@@ -65,6 +157,7 @@ class VectorStoreFrontendNode(FrontendNode):
                 show=True,
                 advanced=True,
                 multiline=False,
+                password=True,
                 value="",
             )
             extra_field2 = TemplateField(
@@ -142,6 +235,7 @@ class VectorStoreFrontendNode(FrontendNode):
                 show=True,
                 advanced=True,
                 multiline=False,
+                password=True,
                 value="",
             )
             extra_fields.extend((extra_field, extra_field2, extra_field3, extra_field4))
@@ -200,51 +294,12 @@ class VectorStoreFrontendNode(FrontendNode):
                 self.template.add_field(field)
 
     def add_extra_base_classes(self) -> None:
-        self.base_classes.append("BaseRetriever")
+        self.base_classes.extend(("BaseRetriever", "VectorStoreRetriever"))
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
         FrontendNode.format_field(field, name)
         # Define common field attributes
-        basic_fields = [
-            "work_dir",
-            "collection_name",
-            "api_key",
-            "location",
-            "persist_directory",
-            "persist",
-            "weaviate_url",
-            "index_name",
-            "namespace",
-            "folder_path",
-            "table_name",
-            "query_name",
-            "supabase_url",
-            "supabase_service_key",
-            "mongodb_atlas_cluster_uri",
-            "collection_name",
-            "db_name",
-        ]
-        advanced_fields = [
-            "n_dim",
-            "key",
-            "prefix",
-            "distance_func",
-            "content_payload_key",
-            "metadata_payload_key",
-            "timeout",
-            "host",
-            "path",
-            "url",
-            "port",
-            "https",
-            "prefer_grpc",
-            "grpc_port",
-            "pinecone_api_key",
-            "pinecone_env",
-            "client_kwargs",
-            "search_kwargs",
-        ]
 
         # Check and set field attributes
         if field.name == "texts":
@@ -252,12 +307,12 @@ class VectorStoreFrontendNode(FrontendNode):
             # when instantiating the vectorstores
             field.name = "documents"
 
-            field.field_type = "TextSplitter"
+            field.field_type = "Document"
             field.display_name = "Documents"
             field.required = False
             field.show = True
             field.advanced = False
-
+            field.is_list = True
         elif "embedding" in field.name:
             # for backwards compatibility
             field.name = "embedding"
@@ -267,7 +322,7 @@ class VectorStoreFrontendNode(FrontendNode):
             field.display_name = "Embedding"
             field.field_type = "Embeddings"
 
-        elif field.name in basic_fields:
+        elif field.name in BASIC_FIELDS:
             field.show = True
             field.advanced = False
             if field.name == "api_key":
@@ -277,7 +332,7 @@ class VectorStoreFrontendNode(FrontendNode):
                 field.value = ":memory:"
                 field.placeholder = ":memory:"
 
-        elif field.name in advanced_fields:
+        elif field.name in ADVANCED_FIELDS:
             field.show = True
             field.advanced = True
             if "key" in field.name:

@@ -1,19 +1,23 @@
-import { useContext, useEffect, useState } from "react";
-import { PopUpContext } from "../../contexts/popUpContext";
+import { useEffect, useState } from "react";
 import CodeAreaModal from "../../modals/codeAreaModal";
-import TextAreaModal from "../../modals/textAreaModal";
-import { TextAreaComponentType } from "../../types/components";
-import { INPUT_STYLE } from "../../constants";
-import { ExternalLink } from "lucide-react";
+import { CodeAreaComponentType } from "../../types/components";
+
+import IconComponent from "../genericIconComponent";
 
 export default function CodeAreaComponent({
   value,
   onChange,
   disabled,
   editNode = false,
-}: TextAreaComponentType) {
-  const [myValue, setMyValue] = useState(value);
-  const { openPopUp } = useContext(PopUpContext);
+  nodeClass,
+  dynamic,
+  setNodeClass,
+  id = "",
+  readonly = false,
+}: CodeAreaComponentType) {
+  const [myValue, setMyValue] = useState(
+    typeof value == "string" ? value : JSON.stringify(value)
+  );
   useEffect(() => {
     if (disabled) {
       setMyValue("");
@@ -22,57 +26,45 @@ export default function CodeAreaComponent({
   }, [disabled, onChange]);
 
   useEffect(() => {
-    setMyValue(value);
+    setMyValue(typeof value == "string" ? value : JSON.stringify(value));
   }, [value]);
 
   return (
-    <div
-      className={
-        disabled ? "pointer-events-none cursor-not-allowed w-full" : "w-full"
-      }
-    >
-      <div className="w-full flex items-center">
-        <span
-          onClick={() => {
-            openPopUp(
-              <CodeAreaModal
-                value={myValue}
-                setValue={(t: string) => {
-                  setMyValue(t);
-                  onChange(t);
-                }}
-              />
-            );
-          }}
-          className={
-            editNode
-              ? "truncate cursor-pointer placeholder:text-center text-ring block w-full pt-0.5 pb-0.5 form-input rounded-md border-ring border-1 shadow-sm text-sm bg-transparent sm:text-sm" +
-                INPUT_STYLE
-              : "truncate block w-full text-ring px-3 py-2 rounded-md border border-ring shadow-sm sm:text-sm placeholder:text-muted-foreground" +
-                INPUT_STYLE +
-                (disabled ? " bg-input" : "")
-          }
-        >
-          {myValue !== "" ? myValue : "Type something..."}
-        </span>
-        <button
-          onClick={() => {
-            openPopUp(
-              <CodeAreaModal
-                value={myValue}
-                setValue={(t: string) => {
-                  setMyValue(t);
-                  onChange(t);
-                }}
-              />
-            );
-          }}
-        >
+    <div className={disabled ? "pointer-events-none w-full " : " w-full"}>
+      <CodeAreaModal
+        readonly={readonly}
+        dynamic={dynamic}
+        value={myValue}
+        nodeClass={nodeClass}
+        setNodeClass={setNodeClass!}
+        setValue={(value: string) => {
+          setMyValue(value);
+          onChange(value);
+        }}
+      >
+        <div className="flex w-full items-center">
+          <span
+            id={id}
+            className={
+              editNode
+                ? "input-edit-node input-dialog"
+                : (disabled ? " input-disable input-ring " : "") +
+                  " primary-input text-muted-foreground "
+            }
+          >
+            {myValue !== "" ? myValue : "Type something..."}
+          </span>
           {!editNode && (
-            <ExternalLink className="w-6 h-6 hover:text-ring  ml-3" />
+            <IconComponent
+              name="ExternalLink"
+              className={
+                "icons-parameters-comp" +
+                (disabled ? " text-ring" : " hover:text-accent-foreground")
+              }
+            />
           )}
-        </button>
-      </div>
+        </div>
+      </CodeAreaModal>
     </div>
   );
 }

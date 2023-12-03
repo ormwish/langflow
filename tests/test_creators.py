@@ -32,9 +32,11 @@ def sample_agent_creator() -> AgentCreator:
 
 
 def test_lang_chain_type_creator_to_dict(
+    client,
     sample_lang_chain_type_creator: LangChainTypeCreator,
 ):
     type_dict = sample_lang_chain_type_creator.to_dict()
+
     assert len(type_dict) == 1
     assert "test_type" in type_dict
     assert "node1" in type_dict["test_type"]

@@ -1,137 +1,254 @@
-import { useContext, useState } from "react";
-import { PopUpContext } from "../../contexts/popUpContext";
+import "ace-builds/src-noconflict/ext-language_tools";
 import "ace-builds/src-noconflict/mode-python";
 import "ace-builds/src-noconflict/theme-github";
 import "ace-builds/src-noconflict/theme-twilight";
-import "ace-builds/src-noconflict/ext-language_tools";
+import {
+  ReactNode,
+  forwardRef,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 // import "ace-builds/webpack-resolver";
-import { darkContext } from "../../contexts/darkContext";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import CodeTabsComponent from "../../components/codeTabsComponent";
+import IconComponent from "../../components/genericIconComponent";
+import { EXPORT_CODE_DIALOG } from "../../constants/constants";
+import { AuthContext } from "../../contexts/authContext";
+import { FlowsContext } from "../../contexts/flowsContext";
+import { TemplateVariableType } from "../../types/api";
+import { tweakType, uniqueTweakType } from "../../types/components";
+import { FlowType, NodeType } from "../../types/flow/index";
+import { buildTweaks, convertArrayToObj } from "../../utils/reactflowUtils";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "../../components/ui/dialog";
-import { FlowType } from "../../types/flow/index";
-import { getCurlCode, getPythonApiCode, getPythonCode } from "../../constants";
-import { EXPORT_CODE_DIALOG } from "../../constants";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "../../components/ui/tabs";
-import { Check, Clipboard, Code2 } from "lucide-react";
+  getCurlCode,
+  getPythonApiCode,
+  getPythonCode,
+  getWidgetCode,
+  tabsArray,
+} from "../../utils/utils";
+import BaseModal from "../baseModal";
 
-export default function ApiModal({ flow }: { flow: FlowType }) {
-  const [open, setOpen] = useState(true);
-  const { dark } = useContext(darkContext);
-  const { closePopUp } = useContext(PopUpContext);
-  const [activeTab, setActiveTab] = useState("0");
-  const [isCopied, setIsCopied] = useState<Boolean>(false);
+const ApiModal = forwardRef(
+  (
+    {
+      flow,
+      children,
+    }: {
+      flow: FlowType;
+      children: ReactNode;
+    },
+    ref
+  ) => {
+    const { autoLogin } = useContext(AuthContext);
+    const [open, setOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState("0");
+    const tweak = useRef<tweakType>([]);
+    const tweaksList = useRef<string[]>([]);
+    const { setTweak, getTweak, tabsState } = useContext(FlowsContext);
+    const pythonApiCode = getPythonApiCode(
+      flow,
+      autoLogin,
+      tweak.current,
+      tabsState
+    );
+    const curl_code = getCurlCode(flow, autoLogin, tweak.current, tabsState);
+    const pythonCode = getPythonCode(flow, tweak.current, tabsState);
+    const widgetCode = getWidgetCode(flow, autoLogin, tabsState);
+    const tweaksCode = buildTweaks(flow);
+    const codesArray = [
+      curl_code,
+      pythonApiCode,
+      pythonCode,
+      widgetCode,
+      pythonCode,
+    ];
+    const [tabs, setTabs] = useState(tabsArray(codesArray, 0));
 
-  const copyToClipboard = () => {
-    if (!navigator.clipboard || !navigator.clipboard.writeText) {
-      return;
+    function startState() {
+      tweak.current = [];
+      setTweak([]);
+      tweaksList.current = [];
     }
 
-    navigator.clipboard.writeText(tabs[activeTab].code).then(() => {
-      setIsCopied(true);
+    useEffect(() => {
+      if (flow["data"]!["nodes"].length == 0) {
+        startState();
+      } else {
+        tweak.current = [];
+        const t = buildTweaks(flow);
+        tweak.current.push(t);
+      }
 
-      setTimeout(() => {
-        setIsCopied(false);
-      }, 2000);
-    });
-  };
-  function setModalOpen(x: boolean) {
-    setOpen(x);
-    if (x === false) {
-      closePopUp();
+      filterNodes();
+
+      if (Object.keys(tweaksCode).length > 0) {
+        setActiveTab("0");
+        setTabs(tabsArray(codesArray, 1));
+      } else {
+        setTabs(tabsArray(codesArray, 1));
+      }
+    }, [flow["data"]!["nodes"], open]);
+
+    function filterNodes() {
+      let arrNodesWithValues: string[] = [];
+
+      flow["data"]!["nodes"].forEach((node) => {
+        Object.keys(node["data"]["node"]["template"])
+          .filter(
+            (templateField) =>
+              templateField.charAt(0) !== "_" &&
+              node.data.node.template[templateField].show &&
+              (node.data.node.template[templateField].type === "str" ||
+                node.data.node.template[templateField].type === "bool" ||
+                node.data.node.template[templateField].type === "float" ||
+                node.data.node.template[templateField].type === "code" ||
+                node.data.node.template[templateField].type === "prompt" ||
+                node.data.node.template[templateField].type === "file" ||
+                node.data.node.template[templateField].type === "int" ||
+                node.data.node.template[templateField].type === "dict" ||
+                node.data.node.template[templateField].type === "NestedDict")
+          )
+          .map((n, i) => {
+            arrNodesWithValues.push(node["id"]);
+          });
+      });
+
+      tweaksList.current = arrNodesWithValues.filter((value, index, self) => {
+        return self.indexOf(value) === index;
+      });
     }
+    function buildTweakObject(
+      tw: string,
+      changes: string | string[] | boolean | number | Object[] | Object,
+      template: TemplateVariableType
+    ) {
+      if (typeof changes === "string" && template.type === "float") {
+        changes = parseFloat(changes);
+      }
+      if (typeof changes === "string" && template.type === "int") {
+        changes = parseInt(changes);
+      }
+      if (template.list === true && Array.isArray(changes)) {
+        changes = changes?.filter((x) => x !== "");
+      }
+
+      if (template.type === "dict" && Array.isArray(changes)) {
+        changes = convertArrayToObj(changes);
+      }
+
+      if (template.type === "NestedDict") {
+        changes = JSON.stringify(changes);
+      }
+
+      const existingTweak = tweak.current.find((element) =>
+        element.hasOwnProperty(tw)
+      );
+
+      if (existingTweak) {
+        existingTweak[tw][template["name"]] = changes as string;
+
+        if (existingTweak[tw][template["name"]] == template.value) {
+          tweak.current.forEach((element) => {
+            if (element[tw] && Object.keys(element[tw])?.length === 0) {
+              tweak.current = tweak.current.filter((obj) => {
+                const prop = obj[Object.keys(obj)[0]].prop;
+                return prop !== undefined && prop !== null && prop !== "";
+              });
+            }
+          });
+        }
+      } else {
+        const newTweak = {
+          [tw]: {
+            [template["name"]]: changes,
+          },
+        } as uniqueTweakType;
+        tweak.current.push(newTweak);
+      }
+
+      const pythonApiCode = getPythonApiCode(
+        flow,
+        autoLogin,
+        tweak.current,
+        tabsState
+      );
+      const curl_code = getCurlCode(flow, autoLogin, tweak.current, tabsState);
+      const pythonCode = getPythonCode(flow, tweak.current, tabsState);
+      const widgetCode = getWidgetCode(flow, autoLogin, tabsState);
+
+      tabs![0].code = curl_code;
+      tabs![1].code = pythonApiCode;
+      tabs![2].code = pythonCode;
+      tabs![3].code = widgetCode;
+
+      setTweak(tweak.current);
+    }
+
+    function buildContent(value: string) {
+      const htmlContent = (
+        <div className="w-[200px]">
+          <span>{value != null && value != "" ? value : "None"}</span>
+        </div>
+      );
+      return htmlContent;
+    }
+
+    function getValue(
+      value: string,
+      node: NodeType,
+      template: TemplateVariableType
+    ) {
+      let returnValue = value ?? "";
+
+      if (getTweak.length > 0) {
+        for (const obj of getTweak) {
+          Object.keys(obj).forEach((key) => {
+            const value = obj[key];
+            if (key == node["id"]) {
+              Object.keys(value).forEach((key) => {
+                if (key == template["name"]) {
+                  returnValue = value[key];
+                }
+              });
+            }
+          });
+        }
+      } else {
+        return value ?? "";
+      }
+      return returnValue;
+    }
+
+    return (
+      <BaseModal open={open} setOpen={setOpen}>
+        <BaseModal.Trigger asChild>{children}</BaseModal.Trigger>
+        <BaseModal.Header description={EXPORT_CODE_DIALOG}>
+          <span className="pr-2">Code</span>
+          <IconComponent
+            name="Code2"
+            className="h-6 w-6 pl-1 text-gray-800 dark:text-white"
+            aria-hidden="true"
+          />
+        </BaseModal.Header>
+        <BaseModal.Content>
+          <CodeTabsComponent
+            flow={flow}
+            tabs={tabs!}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            tweaks={{
+              tweak,
+              tweaksList,
+              buildContent,
+              buildTweakObject,
+              getValue,
+            }}
+          />
+        </BaseModal.Content>
+      </BaseModal>
+    );
   }
+);
 
-  const pythonApiCode = getPythonApiCode(flow);
-
-  const curl_code = getCurlCode(flow);
-  const pythonCode = getPythonCode(flow);
-
-  const tabs = [
-    {
-      name: "cURL",
-      mode: "bash",
-      image: "https://curl.se/logo/curl-symbol-transparent.png",
-      code: curl_code,
-    },
-    {
-      name: "Python API",
-      mode: "python",
-      image:
-        "https://images.squarespace-cdn.com/content/v1/5df3d8c5d2be5962e4f87890/1628015119369-OY4TV3XJJ53ECO0W2OLQ/Python+API+Training+Logo.png?format=1000w",
-      code: pythonApiCode,
-    },
-    {
-      name: "Python Code",
-      mode: "python",
-      image: "https://cdn-icons-png.flaticon.com/512/5968/5968350.png",
-      code: pythonCode,
-    },
-  ];
-  return (
-    <Dialog open={true} onOpenChange={setModalOpen}>
-      <DialogTrigger></DialogTrigger>
-      <DialogContent className="lg:max-w-[800px] sm:max-w-[600px] h-[580px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center">
-            <span className="pr-2">Code</span>
-            <Code2 className="h-6 w-6 text-primary pl-1 " aria-hidden="true" />
-          </DialogTitle>
-          <DialogDescription>{EXPORT_CODE_DIALOG}</DialogDescription>
-        </DialogHeader>
-
-        <Tabs
-          defaultValue={"0"}
-          className="w-full h-full overflow-hidden text-center bg-muted rounded-md border"
-          onValueChange={(value) => setActiveTab(value)}
-        >
-          <div className="flex items-center justify-between px-2">
-            <TabsList>
-              {tabs.map((tab, index) => (
-                <TabsTrigger key={index} value={index.toString()}>
-                  {tab.name}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            <div className="float-right">
-              <button
-                className="flex gap-1.5 items-center rounded bg-none p-1 text-xs text-ring "
-                onClick={copyToClipboard}
-              >
-                {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
-                {isCopied ? "Copied!" : "Copy code"}
-              </button>
-            </div>
-          </div>
-
-          {tabs.map((tab, index) => (
-            <TabsContent
-              value={index.toString()}
-              className="overflow-hidden w-full h-full px-4 pb-4 -mt-1"
-            >
-              <SyntaxHighlighter
-                className="h-[400px] w-full overflow-auto"
-                language={tab.mode}
-                style={oneDark}
-              >
-                {tab.code}
-              </SyntaxHighlighter>
-            </TabsContent>
-          ))}
-        </Tabs>
-      </DialogContent>
-    </Dialog>
-  );
-}
+export default ApiModal;

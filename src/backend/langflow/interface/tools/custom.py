@@ -1,7 +1,7 @@
 from typing import Callable, Optional
 from langflow.interface.importing.utils import get_function
 
-from pydantic import BaseModel, validator
+from pydantic.v1 import BaseModel, validator
 
 from langflow.utils import validate
 from langchain.agents.tools import Tool
@@ -34,8 +34,6 @@ class Function(BaseModel):
 
 
 class PythonFunctionTool(Function, Tool):
-    """Python function"""
-
     name: str = "Custom Tool"
     description: str
     code: str
@@ -49,6 +47,4 @@ class PythonFunctionTool(Function, Tool):
 
 
 class PythonFunction(Function):
-    """Python function"""
-
     code: str

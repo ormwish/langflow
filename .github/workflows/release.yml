@@ -10,13 +10,11 @@ on:
       - "pyproject.toml"
 
 env:
-  POETRY_VERSION: "1.4.0"
+  POETRY_VERSION: "1.5.1"
 
 jobs:
   if_release:
-    if: |
-      ${{ github.event.pull_request.merged == true }}
-      && ${{ contains(github.event.pull_request.labels.*.name, 'Release') }}
+    if: ${{ (github.event.pull_request.merged == true) && contains(github.event.pull_request.labels.*.name, 'Release') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -47,11 +45,3 @@ jobs:
           POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           poetry publish
-
-      - name: Trigger build and push on langchain-serve
-        uses: peter-evans/repository-dispatch@v2
-        with:
-          token: ${{ secrets.SERVE_GITHUB_TOKEN }}
-          repository: jina-ai/langchain-serve
-          event-type: langflow-push
-          client-payload: '{"push_token": "${{ secrets.LCSERVE_PUSH_TOKEN }}", "branch": "main"}'

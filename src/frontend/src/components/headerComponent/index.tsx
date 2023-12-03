@@ -1,58 +1,54 @@
-import { BellIcon, Home, MoonIcon, SunIcon, Users2 } from "lucide-react";
-import { useContext, useEffect, useState } from "react";
+import { useContext } from "react";
 import { FaDiscord, FaGithub, FaTwitter } from "react-icons/fa";
-import { Button } from "../ui/button";
-import { TabsContext } from "../../contexts/tabsContext";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import AlertDropdown from "../../alerts/alertDropDown";
+import { USER_PROJECTS_HEADER } from "../../constants/constants";
 import { alertContext } from "../../contexts/alertContext";
+import { AuthContext } from "../../contexts/authContext";
 import { darkContext } from "../../contexts/darkContext";
-import { PopUpContext } from "../../contexts/popUpContext";
-import { typesContext } from "../../contexts/typesContext";
-import MenuBar from "./components/menuBar";
-import { Link, useLocation, useParams } from "react-router-dom";
-import { USER_PROJECTS_HEADER } from "../../constants";
-import { getRepoStars } from "../../controllers/API";
+import { FlowsContext } from "../../contexts/flowsContext";
+import { gradients } from "../../utils/styleUtils";
+import IconComponent from "../genericIconComponent";
+import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 import { Separator } from "../ui/separator";
-import { Bell } from "lucide-react";
+import MenuBar from "./components/menuBar";
 
-export default function Header() {
-  const { flows, addFlow, tabId } = useContext(TabsContext);
-  const { openPopUp } = useContext(PopUpContext);
-  const { templates } = useContext(typesContext);
-  const { id } = useParams();
-  const AlertWidth = 384;
+export default function Header(): JSX.Element {
+  const { flows, tabId } = useContext(FlowsContext);
   const { dark, setDark } = useContext(darkContext);
-  const { notificationCenter, setNotificationCenter, setErrorData } =
-    useContext(alertContext);
+  const { notificationCenter } = useContext(alertContext);
   const location = useLocation();
+  const { logout, autoLogin, isAdmin, userData } = useContext(AuthContext);
+  const { stars, gradientIndex } = useContext(darkContext);
+  const navigate = useNavigate();
 
-  const [stars, setStars] = useState(null);
-
-  useEffect(() => {
-    async function fetchStars() {
-      const starsCount = await getRepoStars("logspace-ai", "langflow");
-      setStars(starsCount);
-    }
-    fetchStars();
-  }, []);
   return (
-    <div className="w-full h-12 flex justify-between items-center border-b bg-muted">
-      <div className="flex gap-2 justify-start items-center w-96">
+    <div className="header-arrangement">
+      <div className="header-start-display">
         <Link to="/">
-          <span className="text-2xl ml-4">⛓️</span>
+          <span className="ml-4 text-2xl">⛓️</span>
         </Link>
+
         {flows.findIndex((f) => tabId === f.id) !== -1 && tabId !== "" && (
           <MenuBar flows={flows} tabId={tabId} />
         )}
       </div>
-      <div className="flex gap-2 items-center">
+      <div className="round-button-div">
         <Link to="/">
           <Button
             className="gap-2"
             variant={location.pathname === "/" ? "primary" : "secondary"}
             size="sm"
           >
-            <Home className="w-4 h-4" />
+            <IconComponent name="Home" className="h-4 w-4" />
             <div className="flex-1">{USER_PROJECTS_HEADER}</div>
           </Button>
         </Link>
@@ -64,24 +60,22 @@ export default function Header() {
             }
             size="sm"
           >
-            <Users2 className="w-4 h-4" />
+            <IconComponent name="Users2" className="h-4 w-4" />
             <div className="flex-1">Community Examples</div>
           </Button>
         </Link>
       </div>
-      <div className="flex justify-end px-2 w-96">
-        <div className="ml-auto mr-2 flex gap-5 items-center">
+      <div className="header-end-division">
+        <div className="header-end-display">
           <a
             href="https://github.com/logspace-ai/langflow"
             target="_blank"
             rel="noreferrer"
-            className="inline-flex shadow-sm items-center justify-center text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background text-muted-foreground  border border-input hover:bg-accent hover:text-accent-foreground h-9 px-3 pr-0 rounded-md"
+            className="header-github-link"
           >
-            <FaGithub className="h-5 w-5 mr-2" />
+            <FaGithub className="mr-2 h-5 w-5" />
             Star
-            <div className="ml-2 flex text-sm bg-background rounded-md rounded-l-none border px-2 h-9 -mr-px items-center justify-center">
-              {stars}
-            </div>
+            <div className="header-github-display">{stars}</div>
           </a>
           <a
             href="https://twitter.com/logspace_ai"
@@ -89,7 +83,7 @@ export default function Header() {
             rel="noreferrer"
             className="text-muted-foreground"
           >
-            <FaTwitter className="h-5 w-5" />
+            <FaTwitter className="side-bar-button-size" />
           </a>
           <a
             href="https://discord.gg/EqksyE2EX9"
@@ -97,47 +91,88 @@ export default function Header() {
             rel="noreferrer"
             className="text-muted-foreground"
           >
-            <FaDiscord className="h-5 w-5" />
+            <FaDiscord className="side-bar-button-size" />
           </a>
 
           <Separator orientation="vertical" />
           <button
-            className="text-muted-foreground hover:text-ring "
+            className="extra-side-bar-save-disable"
             onClick={() => {
               setDark(!dark);
             }}
           >
             {dark ? (
-              <SunIcon className="h-5 w-5" />
+              <IconComponent name="SunIcon" className="side-bar-button-size" />
             ) : (
-              <MoonIcon className="h-5 w-5" />
+              <IconComponent name="MoonIcon" className="side-bar-button-size" />
             )}
           </button>
-          <button
-            className="text-muted-foreground hover:text-ring relative"
-            onClick={(event: React.MouseEvent<HTMLElement>) => {
-              setNotificationCenter(false);
-              const { top, left } = (
-                event.target as Element
-              ).getBoundingClientRect();
-              openPopUp(
-                <>
-                  <div
-                    className="z-10 absolute"
-                    style={{ top: top + 34, left: left - AlertWidth }}
+          <AlertDropdown>
+            <div className="extra-side-bar-save-disable relative">
+              {notificationCenter && (
+                <div className="header-notifications"></div>
+              )}
+              <IconComponent
+                name="Bell"
+                className="side-bar-button-size"
+                aria-hidden="true"
+              />
+            </div>
+          </AlertDropdown>
+          {!autoLogin && (
+            <button
+              onClick={() => {
+                navigate("/account/api-keys");
+              }}
+            >
+              <IconComponent
+                name="Key"
+                className="side-bar-button-size text-muted-foreground hover:text-accent-foreground"
+              />
+            </button>
+          )}
+          {!autoLogin && (
+            <>
+              <Separator orientation="vertical" />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className={
+                      "h-7 w-7 rounded-full focus-visible:outline-0 " +
+                      (userData?.profile_image ?? gradients[gradientIndex])
+                    }
+                  />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {isAdmin && (
+                    <DropdownMenuItem
+                      className="cursor-pointer"
+                      onClick={() => navigate("/admin")}
+                    >
+                      Admin Page
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => navigate("/account/settings")}
                   >
-                    <AlertDropdown />
-                  </div>
-                  <div className="h-screen w-screen fixed top-0 left-0"></div>
-                </>
-              );
-            }}
-          >
-            {notificationCenter && (
-              <div className="absolute w-1.5 h-1.5 rounded-full bg-destructive right-[3px]"></div>
-            )}
-            <Bell className="h-5 w-5" aria-hidden="true" />
-          </button>
+                    Profile Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => {
+                      logout();
+                      navigate("/login");
+                    }}
+                  >
+                    Sign Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -1,20 +1,25 @@
-import "reactflow/dist/style.css";
-import { useState, useEffect, useContext } from "react";
-import "./App.css";
-import { useLocation } from "react-router-dom";
 import _ from "lodash";
+import { useContext, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import "reactflow/dist/style.css";
+import "./App.css";
 
+import { ErrorBoundary } from "react-error-boundary";
 import ErrorAlert from "./alerts/error";
 import NoticeAlert from "./alerts/notice";
 import SuccessAlert from "./alerts/success";
-import { alertContext } from "./contexts/alertContext";
-import { locationContext } from "./contexts/locationContext";
-import { ErrorBoundary } from "react-error-boundary";
 import CrashErrorComponent from "./components/CrashErrorComponent";
-import { TabsContext } from "./contexts/tabsContext";
-import { getVersion } from "./controllers/API";
+import FetchErrorComponent from "./components/fetchErrorComponent";
+import LoadingComponent from "./components/loadingComponent";
+import {
+  FETCH_ERROR_DESCRIPION,
+  FETCH_ERROR_MESSAGE,
+} from "./constants/constants";
+import { alertContext } from "./contexts/alertContext";
+import { FlowsContext } from "./contexts/flowsContext";
+import { locationContext } from "./contexts/locationContext";
+import { typesContext } from "./contexts/typesContext";
 import Router from "./routes";
-import Header from "./components/headerComponent";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } =
@@ -25,7 +30,8 @@ export default function App() {
     setShowSideBar(true);
     setIsStackedOpen(true);
   }, [location.pathname, setCurrent, setIsStackedOpen, setShowSideBar]);
-  const { hardReset } = useContext(TabsContext);
+  const { hardReset } = useContext(FlowsContext);
+
   const {
     errorData,
     errorOpen,
@@ -36,7 +42,12 @@ export default function App() {
     successData,
     successOpen,
     setSuccessOpen,
+    setErrorData,
+    loading,
+    setLoading,
   } = useContext(alertContext);
+  const navigate = useNavigate();
+  const { fetchError } = useContext(typesContext);
 
   // Initialize state variable for the list of alerts
   const [alertsList, setAlertsList] = useState<
@@ -51,6 +62,13 @@ export default function App() {
   useEffect(() => {
     // If there is an error alert open with data, add it to the alertsList
     if (errorOpen && errorData) {
+      if (
+        alertsList.length > 0 &&
+        JSON.stringify(alertsList[alertsList.length - 1].data) ===
+          JSON.stringify(errorData)
+      ) {
+        return;
+      }
       setErrorOpen(false);
       setAlertsList((old) => {
         let newAlertsList = [
@@ -62,6 +80,13 @@ export default function App() {
     }
     // If there is a notice alert open with data, add it to the alertsList
     else if (noticeOpen && noticeData) {
+      if (
+        alertsList.length > 0 &&
+        JSON.stringify(alertsList[alertsList.length - 1].data) ===
+          JSON.stringify(noticeData)
+      ) {
+        return;
+      }
       setNoticeOpen(false);
       setAlertsList((old) => {
         let newAlertsList = [
@@ -73,6 +98,13 @@ export default function App() {
     }
     // If there is a success alert open with data, add it to the alertsList
     else if (successOpen && successData) {
+      if (
+        alertsList.length > 0 &&
+        JSON.stringify(alertsList[alertsList.length - 1].data) ===
+          JSON.stringify(successData)
+      ) {
+        return;
+      }
       setSuccessOpen(false);
       setAlertsList((old) => {
         let newAlertsList = [
@@ -103,7 +135,7 @@ export default function App() {
 
   return (
     //need parent component with width and height
-    <div className="h-full flex flex-col">
+    <div className="flex h-full flex-col">
       <ErrorBoundary
         onReset={() => {
           window.localStorage.removeItem("tabsData");
@@ -113,14 +145,25 @@ export default function App() {
         }}
         FallbackComponent={CrashErrorComponent}
       >
-        <Header />
-        <Router />
+        {loading ? (
+          <div className="loading-page-panel">
+            {fetchError ? (
+              <FetchErrorComponent
+                description={FETCH_ERROR_DESCRIPION}
+                message={FETCH_ERROR_MESSAGE}
+              ></FetchErrorComponent>
+            ) : (
+              <LoadingComponent remSize={50} />
+            )}
+          </div>
+        ) : (
+          <>
+            <Router />
+          </>
+        )}
       </ErrorBoundary>
       <div></div>
-      <div
-        className="flex flex-col-reverse fixed bottom-5 left-5"
-        style={{ zIndex: 999 }}
-      >
+      <div className="app-div" style={{ zIndex: 999 }}>
         {alertsList.map((alert) => (
           <div key={alert.id}>
             {alert.type === "error" ? (

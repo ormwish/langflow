@@ -3,19 +3,8 @@ import type { FC } from "react";
 import React from "react";
 import { Tooltip as ReactTooltip } from "react-tooltip";
 import "react-tooltip/dist/react-tooltip.css";
-import { classNames } from "../../utils";
-
-type TooltipProps = {
-  selector: string;
-  content?: string;
-  disabled?: boolean;
-  htmlContent?: React.ReactNode;
-  className?: string; // This should use !impornant to override the default styles eg: '!bg-white'
-  position?: "top" | "right" | "bottom" | "left";
-  clickable?: boolean;
-  children: React.ReactNode;
-  delayShow?: number;
-};
+import { TooltipProps } from "../../types/components";
+import { classNames } from "../../utils/utils";
 
 const TooltipReact: FC<TooltipProps> = ({
   selector,
@@ -27,7 +16,7 @@ const TooltipReact: FC<TooltipProps> = ({
   className,
   clickable,
   delayShow,
-}) => {
+}: TooltipProps): JSX.Element => {
   return (
     <div className="tooltip-container">
       {React.cloneElement(children as React.ReactElement, {
@@ -37,8 +26,8 @@ const TooltipReact: FC<TooltipProps> = ({
         id={selector}
         content={content}
         className={classNames(
-          "!bg-white !text-xs !font-normal !text-foreground !shadow-md !opacity-100 z-[9999]",
-          className
+          "z-[9999] !bg-white !text-xs !font-normal !text-foreground !opacity-100 !shadow-md",
+          className!
         )}
         place={position}
         clickable={clickable}
